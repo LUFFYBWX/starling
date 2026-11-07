@@ -3,7 +3,7 @@
 //! Detection is based on block-state registry names, never on light level alone.
 //! This avoids treating lava, fire, or other natural light sources as player clues.
 use crate::chunk::Chunk;
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet, VecDeque};
 
 /// A matching block in absolute world coordinates.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -109,8 +109,8 @@ pub fn scan_loaded_chunks_near(
     scan_loaded_states_near(world, &states, facts.air.0, center_chunk, radius_chunks)
 }
 
-/// Scan loaded chunks for explicitly selected artificial-light block types.
-/// Soul and wall-mounted variants are included; lava and fire are deliberately excluded.
+/// Scan loaded chunks for blocks illuminated by selected artificial light sources.
+/// Natural emitters (including lava) are never used as propagation origins.
 pub fn scan_loaded_artificial_lights_near(
     world: &crate::world::World,
     facts: &crate::blocks::BlockFacts,
@@ -124,46 +124,65 @@ pub fn scan_loaded_artificial_lights_near(
         "minecraft:soul_wall_torch",
         "minecraft:lantern",
         "minecraft:soul_lantern",
-        "minecraft:sea_lantern",
-        "minecraft:glowstone",
     ];
-    scan_loaded_states_near(
-        world,
-        &state_ids_named(facts, LIGHT_BLOCKS),
-        facts.air.0,
-        center_chunk,
-        radius_chunks,
-    )
-    .into_iter()
-    .map(|p| ArtificialLightMarker { x: p.x, y: p.y, z: p.z })
-    .collect()
-}
+    const DIRECTIONS: [(i32, i32, i32); 6] = [
+        (1, 0, 0), (-1, 0, 0), (0, 1, 0), (0, -1, 0), (0, 0, 1), (0, 0, -1),
+    ];
+    let source_states = state_ids_named(facts, LIGHT_BLOCKS);
+    if source_states.is_empty() {
+        return Vec::new();
+    }
+    let sources = scan_loaded_states_near(
+        world, &source_states, facts.air.0, center_chunk, radius_chunks,
+    );
+    let mut illuminated = HashSet::new();
+    let min_chunk = (center_chunk.0 - radius_chunks.max(0), center_chunk.1 - radius_chunks.max(0));
+    let max_chunk = (center_chunk.0 + radius_chunks.max(0), center_chunk.1 + radius_chunks.max(0));
 
-
-/// A loaded container or utility block entity highlighted by the ESP.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-pub struct BlockEntityMarker {
-    pub x: i32,
-    pub y: i32,
-    pub z: i32,
-    /// 0 = chest/barrel, 1 = shulker, 2 = other container or utility.
-    pub kind: u8,
-}
-
-/// Evidence score for one resident chunk. This is a heuristic, not a real
-/// statistical probability that a player base exists there.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct ChunkSuspicion {
-    pub chunk_x: i32,
-    pub chunk_z: i32,
-    pub score: u8,
-    /// Vertical bounds of the evidence that made this chunk suspicious.
-    pub min_y: i32,
-    pub max_y: i32,
-    pub block_entities: u16,
-    pub shulkers: u16,
-    pub clusters: u16,
-    pub artificial_lights: u16,
+    for source in sources {
+        let source_state = world.block(source.x, source.y, source.z);
+        let initial = facts.get(source_state).emission.min(15);
+        if initial == 0 {
+            continue;
+        }
+        let mut best = HashMap::from([((source.x, source.y, source.z), initial)]);
+        let mut queue = VecDeque::from([((source.x, source.y, source.z), initial)]);
+        while let Some(((x, y, z), level)) = queue.pop_front() {
+            if level <= 1 {
+                continue;
+            }
+            for (dx, dy, dz) in DIRECTIONS {
+                let pos = (x + dx, y + dy, z + dz);
+                let (cx, cz) = (pos.0.div_euclid(16), pos.2.div_euclid(16));
+                if cx < min_chunk.0 || cx > max_chunk.0 || cz < min_chunk.1 || cz > max_chunk.1
+                    || !world.loaded(pos.0, pos.2)
+                {
+                    continue;
+                }
+                let state = world.block(pos.0, pos.1, pos.2);
+                let cell = facts.get(state);
+                // Another emitter is not evidence that this selected source
+                // illuminates the cell. Natural emitters are not traversed.
+                if cell.emission > 0 && !source_states.contains(&state.0) {
+                    continue;
+                }
+                let next = level.saturating_sub(cell.dampening.max(1));
+                if next == 0 || best.get(&pos).is_some_and(|old| *old >= next) {
+                    continue;
+                }
+                best.insert(pos, next);
+                queue.push_back((pos, next));
+                if !source_states.contains(&state.0) {
+                    illuminated.insert(pos);
+                }
+            }
+        }
+    }
+    let mut markers: Vec<_> = illuminated.into_iter()
+        .map(|(x, y, z)| ArtificialLightMarker { x, y, z })
+        .collect();
+    markers.sort_by_key(|m| (m.x, m.y, m.z));
+    markers
 }
 
 /// Whether a container is backed by a generated loot table in its saved chunk data.
