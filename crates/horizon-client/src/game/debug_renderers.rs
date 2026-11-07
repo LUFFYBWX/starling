@@ -224,7 +224,7 @@ impl Game<'_> {
             } else {
                 (0.18, 0x48FFB020)
             };
-            fills.extend(
+            esp_fills.extend(
                 g::cuboid_fill_quads(
                     [x + inset, y + inset, z + inset],
                     [x + 1.0 - inset, y + 1.0 - inset, z + 1.0 - inset],
