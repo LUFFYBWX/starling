@@ -104,7 +104,7 @@ impl Game<'_> {
     }
 
     /// The fill and text renderers' geometry for this frame.
-    pub(super) fn debug_renderer_geometry(&mut self, camera: glam::DVec3, out: &mut Vec<Vertex>) {
+    pub(super) fn debug_renderer_geometry(&mut self, camera: glam::DVec3, out: &mut Vec<Vertex>, see_through: &mut Vec<Vertex>) {
         let water = self.debug_entry("visualize_water_levels");
         let heightmap = self.debug_entry("visualize_heightmap");
         let block_light = self.debug_entry("visualize_block_light_levels");
@@ -123,6 +123,7 @@ impl Game<'_> {
         let feet = [p.position.x, p.position.y, p.position.z].map(|v| v.floor() as i32);
         let eye = camera.to_array().map(|v| v.floor() as i32);
         let mut fills: Vec<([[f64; 3]; 4], u32)> = Vec::new();
+        let mut esp_fills: Vec<([[f64; 3]; 4], u32)> = Vec::new();
         let mut texts: Vec<([f64; 3], String, u32)> = Vec::new();
         if water {
             self.water_level_shapes(feet, &mut fills, &mut texts);
@@ -146,7 +147,7 @@ impl Game<'_> {
             for x in base_x..base_x + 16 {
                 for z in base_z..base_z + 16 {
                     let y = f64::from(self.column_height(HeightmapType::WorldSurface, x, z)) - 0.025;
-                    fills.extend(
+                    esp_fills.extend(
                         g::cuboid_fill_quads(
                             [f64::from(x), y, f64::from(z)],
                             [f64::from(x + 1), y + 0.035, f64::from(z + 1)],
@@ -198,7 +199,7 @@ impl Game<'_> {
                 0 => 0x8060D0FF, // chest / barrel
                 _ => 0x80FFD060, // furnace, hopper and other utility
             };
-            fills.extend(
+            esp_fills.extend(
                 g::cuboid_fill_quads(
                     [x + 0.04, y + 0.04, z + 0.04],
                     [x + 0.96, y + 0.96, z + 0.96],
@@ -226,29 +227,33 @@ impl Game<'_> {
                 .map(|q| (q, ARTIFICIAL_LIGHT_FILL)),
             );
         }
-        let start = out.len();
-        self.mark_translucent_entity(start, "");
         let light = vertex_light(0xFF);
         let mut white = HudBatch::new([1, 1]);
+        let start = out.len();
+        self.mark_translucent_entity(start, "");
         for (quad, color) in fills {
-            // A plain colour: the atlas's white pixel at the fill's colour
-            // (the batch takes ABGR).
             white.vertices.clear();
             white.fill(&self.gui.atlas, 0.0, 0.0, 1.0, 1.0, abgr(color));
-            let Some(v) = white.vertices.first().copied() else {
-                continue;
-            };
+            let Some(v) = white.vertices.first().copied() else { continue };
             for corner in quad {
                 out.push(Vertex {
                     normal: [0; 4],
-                    pos: (glam::DVec3::from_array(corner) - camera)
-                        .as_vec3()
-                        .to_array(),
-                    uv: v.uv,
-                    layer: 0,
-                    color: v.color,
-                    light,
-                    glint_uv: [0.0, 0.0],
+                    pos: (glam::DVec3::from_array(corner) - camera).as_vec3().to_array(),
+                    uv: v.uv, layer: 0, color: v.color, light, glint_uv: [0.0, 0.0],
+                });
+            }
+        }
+        // ESP surfaces and container boxes use the always-on-top vertex stream;
+        // ordinary debug overlays above retain normal world depth testing.
+        for (quad, color) in esp_fills {
+            white.vertices.clear();
+            white.fill(&self.gui.atlas, 0.0, 0.0, 1.0, 1.0, abgr(color));
+            let Some(v) = white.vertices.first().copied() else { continue };
+            for corner in quad {
+                see_through.push(Vertex {
+                    normal: [0; 4],
+                    pos: (glam::DVec3::from_array(corner) - camera).as_vec3().to_array(),
+                    uv: v.uv, layer: 0, color: v.color, light, glint_uv: [0.0, 0.0],
                 });
             }
         }
