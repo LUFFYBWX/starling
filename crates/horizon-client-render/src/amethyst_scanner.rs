@@ -438,11 +438,11 @@ pub fn score_suspicious_chunks(
             let has_base_like_storage = shulkers >= 2
                 || (shulkers >= 1 && storage >= 2)
                 || (storage >= 4 && utilities >= 2);
-            // Strong artificial lighting can reinforce a large mature geode
-            // even when the area has few storage block entities.
-            let has_light_supported_geode = nearby_clusters.len() >= 8 && nearby_lights.len() >= 3;
+            // A large fully-grown geode is sufficient evidence on its own;
+            // artificial lighting adds score but is not a requirement.
+            let has_large_mature_geode = nearby_clusters.len() >= 8;
 
-            if (has_base_like_storage || has_light_supported_geode) && score >= usize::from(minimum_score) {
+            if (has_base_like_storage || has_large_mature_geode) && score >= usize::from(minimum_score) {
                 let evidence_y = nearby_entities
                     .iter()
                     .map(|m| m.y)
@@ -667,14 +667,11 @@ mod tests {
     }
 
     #[test]
-    fn a_large_mature_geode_with_artificial_lighting_can_flag_a_chunk() {
+    fn a_large_mature_geode_without_artificial_lighting_can_flag_a_chunk() {
         let clusters: Vec<_> = (0..8)
             .map(|x| AmethystMarker { x, y: 20, z: 8 })
             .collect();
-        let lights: Vec<_> = (0..3)
-            .map(|x| ArtificialLightMarker { x, y: 20, z: 10, is_source: true })
-            .collect();
-        let scored = score_suspicious_chunks(&[], &clusters, &[], &lights, 45);
+        let scored = score_suspicious_chunks(&[], &clusters, &[], &[], 45);
         assert!(!scored.is_empty());
     }
 
