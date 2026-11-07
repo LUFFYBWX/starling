@@ -192,7 +192,7 @@ pub fn scan_loaded_block_entities_near(
         // Trial Chambers are structures, not player bases. Keep their signature
         // block entities as exclusion markers so nearby loot/mechanisms do not
         // inflate base suspicion.
-        "minecraft:trial_spawner", "minecraft:vault",
+        "minecraft:trial_spawner", "minecraft:vault", "minecraft:mob_spawner",
     ];
     let radius = radius_chunks.max(0);
     world.block_entities.iter().filter_map(|(&(x, y, z), _)| {
@@ -204,7 +204,7 @@ pub fn scan_loaded_block_entities_near(
         if !TARGETS.contains(&name) {
             return None;
         }
-        let kind = if name == "minecraft:trial_spawner" || name == "minecraft:vault" { 3 }
+        let kind = if name == "minecraft:trial_spawner" || name == "minecraft:vault" || name == "minecraft:mob_spawner" { 3 }
             else if name.ends_with("shulker_box") { 1 }
             else if name.ends_with(":chest") || name.ends_with(":trapped_chest")
                 || name.ends_with(":barrel") || name.ends_with(":ender_chest") { 0 }
@@ -228,9 +228,8 @@ pub fn score_suspicious_chunks(
     }
     let mut results = Vec::new();
     for (cx, cz) in candidates {
-        // Ignore candidate chunks in the immediate vicinity of a known
-        // Trial Spawner or Vault. This prevents Trial Chamber loot and
-        // dispensers from being scored as player storage.
+        // Ignore candidate chunks near known generated-structure spawners,
+        // Trial Spawners, or Vaults. These are exclusion signals, not loot.
         let near_trial_chamber = trial_markers.iter().any(|m| {
             (m.x.div_euclid(16) - cx).abs() <= 3
                 && (m.z.div_euclid(16) - cz).abs() <= 3
@@ -247,17 +246,22 @@ pub fn score_suspicious_chunks(
         // Cluster spread across multiple chunks is a stronger geode-region
         // clue than a lone cluster, but it never creates suspicion by itself.
         let cluster_chunks: HashSet<_> = nearby_clusters.iter().map(|m| (m.x.div_euclid(16), m.z.div_euclid(16))).collect();
-        let mut score = (shulkers * 35).min(70)
-            + (storage * 18).min(36)
-            + (utilities * 8).min(16);
+        let mut score = (shulkers * 40).min(80)
+            + (storage * 12).min(36)
+            + (utilities * 5).min(15);
         if nearby_clusters.len() >= 4 { score += 8; }
         if nearby_clusters.len() >= 8 { score += 8; }
         if cluster_chunks.len() >= 2 && nearby_clusters.len() >= 4 { score += 10; }
         if nearby_lights >= 3 { score += 5; }
         if nearby_lights >= 6 { score += 5; }
-        // Requiring at least one detected block entity prevents natural
-        // geodes or lighting alone from flagging an entire region.
-        if score >= 35 {
+        // A lone chest, furnace, or other common generated container is weak
+        // evidence. Require a shulker, several storage blocks, or a
+        // combination of storage and utility blocks before flagging.
+        let has_base_like_storage = shulkers >= 1
+            || storage >= 4
+            || (storage >= 2 && utilities >= 3);
+        // Natural geodes/lights and isolated generated loot must not flag chunks.
+        if has_base_like_storage && score >= 45 {
             // Restrict the ESP outline to the vertical span containing actual
             // evidence, with a small margin so the player can see the nearby
             // cavity without highlighting the entire world-height column.
