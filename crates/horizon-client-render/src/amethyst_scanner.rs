@@ -359,6 +359,12 @@ mod tests {
         chunk.saved = Some(Arc::new(extras));
         assert!(has_generated_loot_table(&chunk, position));
         assert!(!has_generated_loot_table(&chunk, (9, 64, 8)));
+
+        // Freshly generated structures may have no saved chunk extras yet.
+        let mut structure_chunk = Chunk::empty(0, 0);
+        structure_chunk.structure_refs.push((Arc::from("minecraft:mineshaft"), (0, 0)));
+        assert!(has_generated_loot_table(&structure_chunk, position));
+        assert!(!has_generated_loot_table(&Chunk::empty(0, 0), position));
     }
 
     #[test]
