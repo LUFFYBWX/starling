@@ -25,11 +25,11 @@ pub(super) struct ExtrasState {
     /// The dimension the minimap's tiles belong to.
     minimap_dim: Option<Dim>,
     /// Loaded-world budding-amethyst locations, refreshed periodically.
-    amethyst_markers: Vec<horizon_client::amethyst_scanner::AmethystMarker>,
+    pub(super) amethyst_markers: Vec<horizon_client::amethyst_scanner::AmethystMarker>,
     /// Selected artificial-light blocks in loaded chunks.
-    artificial_light_markers: Vec<horizon_client::amethyst_scanner::ArtificialLightMarker>,
+    pub(super) artificial_light_markers: Vec<horizon_client::amethyst_scanner::ArtificialLightMarker>,
     /// Chunks whose amethyst clues have nearby selected artificial lights.
-    suspicious_chunks: std::collections::HashSet<(i32, i32)>,
+    pub(super) suspicious_chunks: std::collections::HashSet<(i32, i32)>,
     amethyst_scanned_at: Option<Instant>,
     /// Auto-reconnect's attempts at the current server.
     reconnect: Tracker,
