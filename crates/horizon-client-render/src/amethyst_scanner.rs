@@ -62,6 +62,35 @@ pub fn scan_chunk(chunk: &Chunk, target_state: u32) -> Vec<AmethystMarker> {
     found
 }
 
+
+/// Scan every resident chunk, resolving every budding-amethyst state from the
+/// active block facts. No packets are sent and unloaded chunks are never read.
+pub fn scan_loaded_chunks(
+    world: &crate::world::World,
+    facts: &crate::blocks::BlockFacts,
+) -> Vec<AmethystMarker> {
+    let target_states: Vec<u32> = facts
+        .states
+        .iter()
+        .enumerate()
+        .filter_map(|(id, state)| {
+            (state.name.as_ref() == "minecraft:budding_amethyst").then_some(id as u32)
+        })
+        .collect();
+
+    if target_states.is_empty() {
+        return Vec::new();
+    }
+
+    let mut found = Vec::new();
+    for (_, chunk) in &world.chunks {
+        for target_state in &target_states {
+            found.extend(scan_chunk(chunk, *target_state));
+        }
+    }
+    found
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
