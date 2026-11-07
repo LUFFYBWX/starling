@@ -353,6 +353,7 @@ pub fn score_suspicious_chunks(
     clusters: &[AmethystMarker],
     small_buds: &[AmethystMarker],
     lights: &[ArtificialLightMarker],
+    minimum_score: u8,
 ) -> Vec<ChunkSuspicion> {
     use std::collections::HashSet;
 
@@ -441,7 +442,7 @@ pub fn score_suspicious_chunks(
             // even when the area has few storage block entities.
             let has_light_supported_geode = nearby_clusters.len() >= 8 && nearby_lights.len() >= 3;
 
-            if (has_base_like_storage || has_light_supported_geode) && score >= 45 {
+            if (has_base_like_storage || has_light_supported_geode) && score >= usize::from(minimum_score) {
                 let evidence_y = nearby_entities
                     .iter()
                     .map(|m| m.y)
@@ -506,20 +507,20 @@ mod tests {
     #[test]
     fn common_generated_storage_alone_does_not_flag_a_chunk() {
         let chest = BlockEntityMarker { x: 8, y: 64, z: 8, kind: 0 };
-        assert!(score_suspicious_chunks(&[chest], &[], &[], &[]).is_empty());
+        assert!(score_suspicious_chunks(&[chest], &[], &[], &[], 45).is_empty());
         let four_chests = [
             chest,
             BlockEntityMarker { x: 9, y: 64, z: 8, kind: 0 },
             BlockEntityMarker { x: 10, y: 64, z: 8, kind: 0 },
             BlockEntityMarker { x: 11, y: 64, z: 8, kind: 0 },
         ];
-        assert!(score_suspicious_chunks(&four_chests, &[], &[], &[]).is_empty());
+        assert!(score_suspicious_chunks(&four_chests, &[], &[], &[], 45).is_empty());
     }
 
     #[test]
     fn one_shulker_without_other_base_evidence_does_not_flag() {
         let shulker = BlockEntityMarker { x: 8, y: 64, z: 8, kind: 1 };
-        assert!(score_suspicious_chunks(&[shulker], &[], &[], &[]).is_empty());
+        assert!(score_suspicious_chunks(&[shulker], &[], &[], &[], 45).is_empty());
     }
 
     #[test]
@@ -538,7 +539,7 @@ mod tests {
             AmethystMarker { x: 6, y: 20, z: 8 },
             AmethystMarker { x: 7, y: 20, z: 8 },
         ];
-        let scored = score_suspicious_chunks(&entities, &clusters, &[], &[]);
+        let scored = score_suspicious_chunks(&entities, &clusters, &[], &[], 45);
         assert_eq!(scored.len(), 1);
         assert!(scored[0].score >= 45);
     }
@@ -554,7 +555,7 @@ mod tests {
             AmethystMarker { x: 8, y: 20, z: 8 },
             AmethystMarker { x: 9, y: 20, z: 8 },
         ];
-        assert!(score_suspicious_chunks(&entities, &clusters, &[], &[]).is_empty());
+        assert!(score_suspicious_chunks(&entities, &clusters, &[], &[], 45).is_empty());
     }
 
     #[test]
@@ -571,7 +572,7 @@ mod tests {
             AmethystMarker { x: 12, y: 20, z: 8 },
         ];
         let small_buds = [AmethystMarker { x: 13, y: 20, z: 8 }];
-        assert!(score_suspicious_chunks(&entities, &clusters, &small_buds, &[]).is_empty());
+        assert!(score_suspicious_chunks(&entities, &clusters, &small_buds, &[], 45).is_empty());
     }
 
     #[test]
@@ -600,7 +601,7 @@ mod tests {
         let lights: Vec<_> = (0..3)
             .map(|x| ArtificialLightMarker { x, y: 20, z: 10, is_source: true })
             .collect();
-        let scored = score_suspicious_chunks(&[], &clusters, &[], &lights);
+        let scored = score_suspicious_chunks(&[], &clusters, &[], &lights, 45);
         assert!(!scored.is_empty());
     }
 
