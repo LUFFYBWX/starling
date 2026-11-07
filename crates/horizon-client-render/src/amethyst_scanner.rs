@@ -212,7 +212,7 @@ pub fn score_suspicious_chunks(
     clusters: &[AmethystMarker],
     lights: &[ArtificialLightMarker],
 ) -> Vec<ChunkSuspicion> {
-    use std::collections::{HashMap, HashSet};
+    use std::collections::HashSet;
     let mut candidates: HashSet<(i32, i32)> = HashSet::new();
     for marker in block_entities {
         candidates.insert((marker.x.div_euclid(16), marker.z.div_euclid(16)));
