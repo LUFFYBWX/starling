@@ -1,0 +1,39 @@
+name: Android scanner validation
+
+on:
+  pull_request:
+    branches: [android]
+  push:
+    branches: [feature/amethyst-scanner]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  source-checks:
+    name: Rust and Android source checks
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: 1.95
+          components: rustfmt, clippy
+
+      - name: Check formatting
+        run: cargo fmt --all -- --check
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Run Android release audit tests
+        run: python -m unittest discover -s tests -p 'test_android*.py'
+
+      - name: Check public source tree
+        run: python tools/check_public_tree.py --history
