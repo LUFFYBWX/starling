@@ -65,7 +65,8 @@ impl Game<'_> {
     pub(super) fn debug_renderer_gizmos(&self, g: &mut Gizmos) {
         // Draw full-height outlines for suspicious chunks directly in the
         // world, always on top so walls do not hide the clue.
-        for &(chunk_x, chunk_z) in &self.extras.suspicious_chunks {
+        for chunk_score in &self.extras.suspicious_chunks {
+            let (chunk_x, chunk_z) = (chunk_score.chunk_x, chunk_score.chunk_z);
             let Some(chunk) = self.world.chunks.get(&(chunk_x, chunk_z)) else {
                 continue;
             };
@@ -124,10 +125,11 @@ impl Game<'_> {
         let amethyst_markers = self.extras.amethyst_markers.clone();
         let artificial_light_markers = self.extras.artificial_light_markers.clone();
         let suspicious_chunks = self.extras.suspicious_chunks.clone();
+        let block_entity_markers = self.extras.block_entity_markers.clone();
         let Some(p) = &self.player else {
             return;
         };
-        if !(water || heightmap || block_light || sky_light || solid || !amethyst_markers.is_empty() || !artificial_light_markers.is_empty()) {
+        if !(water || heightmap || block_light || sky_light || solid || !amethyst_markers.is_empty() || !artificial_light_markers.is_empty() || !block_entity_markers.is_empty()) {
             return;
         }
         let feet = [p.position.x, p.position.y, p.position.z].map(|v| v.floor() as i32);
@@ -164,6 +166,31 @@ impl Game<'_> {
                     [x + 0.92, y + 0.92, z + 0.92],
                 )
                 .map(|q| (q, AMETHYST_FILL)),
+            );
+        }
+        // Block-entity ESP: containers and utility block entities are
+        // highlighted through walls, with shulkers in a distinct color.
+        for marker in block_entity_markers {
+            let dx = f64::from(marker.x) + 0.5 - camera.x;
+            let dy = f64::from(marker.y) + 0.5 - camera.y;
+            let dz = f64::from(marker.z) + 0.5 - camera.z;
+            if dx * dx + dy * dy + dz * dz > 64.0 * 64.0 {
+                continue;
+            }
+            let x = f64::from(marker.x);
+            let y = f64::from(marker.y);
+            let z = f64::from(marker.z);
+            let color = match marker.kind {
+                1 => 0x80D060FF, // shulker
+                0 => 0x8060D0FF, // chest / barrel
+                _ => 0x80FFD060, // furnace, hopper and other utility
+            };
+            fills.extend(
+                g::cuboid_fill_quads(
+                    [x + 0.04, y + 0.04, z + 0.04],
+                    [x + 0.96, y + 0.96, z + 0.96],
+                )
+                .map(|q| (q, color)),
             );
         }
         // Highlight selected artificial-light blocks with the same through-wall
