@@ -620,12 +620,15 @@ mod tests {
     use super::*;
 
     #[test]
-    fn everything_is_off_by_default_and_round_trips() {
+    fn defaults_and_scanner_settings_round_trip() {
         let d = Extras::default();
         assert!(!d.fullbright && !d.dynamic_lights);
         assert!(!d.zoom && !d.fps && !d.keystrokes && !d.minimap && !d.auto_reconnect);
         assert!(!d.mouse_tweaks && !d.sort && !d.own_name_tag);
         assert!(d.discord_presence);
+        assert!(d.scanner_enabled && d.scanner_chunks && d.scanner_amethyst);
+        assert!(d.scanner_block_entities && d.scanner_artificial_lights);
+        assert_eq!(d.scanner_sensitivity, 1);
         assert_eq!(Extras::parse(""), d);
         assert_eq!(Extras::parse(&d.serialize()), d);
         let mut e = d.clone();
@@ -655,6 +658,12 @@ mod tests {
         e.sort = true;
         e.sort_key = "key.keyboard.r".into();
         e.discord_presence = false;
+        Item::Scanner.cycle(&mut e, false);
+        assert_eq!(Item::Scanner.switch(&e), Some(false));
+        Item::ScannerChunks.cycle(&mut e, false);
+        assert_eq!(Item::ScannerChunks.switch(&e), Some(false));
+        Item::ScannerSensitivity.cycle(&mut e, false);
+        assert_eq!(Item::ScannerSensitivity.value(&e), "Sensitive");
         assert_eq!(Extras::parse(&e.serialize()), e);
     }
 
