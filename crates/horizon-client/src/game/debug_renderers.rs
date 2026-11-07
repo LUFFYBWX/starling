@@ -153,6 +153,12 @@ impl Game<'_> {
             let bz = chunk.chunk_z * 16;
             let x = f64::from(bx);
             let z = f64::from(bz);
+            let center_surface = self.column_height(HeightmapType::WorldSurface, bx + 8, bz + 8);
+            texts.push((
+                [x + 8.0, f64::from(center_surface) + 1.2, z + 8.0],
+                format!("Base: {}%", chunk.score),
+                0xFFFF_D080,
+            ));
             let y_north = f64::from(self.column_height(HeightmapType::WorldSurface, bx + 8, bz)) + 0.035;
             let y_south = f64::from(self.column_height(HeightmapType::WorldSurface, bx + 8, bz + 15)) + 0.035;
             let y_west = f64::from(self.column_height(HeightmapType::WorldSurface, bx, bz + 8)) + 0.035;
