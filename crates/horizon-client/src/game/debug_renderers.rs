@@ -63,29 +63,6 @@ impl Game<'_> {
     /// `CollisionBoxRenderer`: the block collisions within 6 of the camera
     /// entity's box, white.
     pub(super) fn debug_renderer_gizmos(&self, g: &mut Gizmos) {
-        // Draw only the four edges of each suspicious chunk at the surface.
-        // This is a real chunk outline, not a 16x16 carpet of filled blocks.
-        let scanner = &self.settings.extras;
-        if scanner.scanner_enabled && scanner.scanner_chunks {
-            for chunk in &self.extras.suspicious_chunks {
-                if !self.world.chunks.contains_key(&(chunk.chunk_x, chunk.chunk_z)) {
-                    continue;
-                }
-                let x = f64::from(chunk.chunk_x * 16);
-                let z = f64::from(chunk.chunk_z * 16);
-                let y = f64::from(self.column_height(
-                    HeightmapType::WorldSurface,
-                    chunk.chunk_x * 16 + 8,
-                    chunk.chunk_z * 16 + 8,
-                )) + 0.04;
-                let color = 0xFFB060FF;
-                let width = 3.0;
-                g.on_top.push(g::Line { start: [x, y, z], end: [x + 16.0, y, z], color, width });
-                g.on_top.push(g::Line { start: [x + 16.0, y, z], end: [x + 16.0, y, z + 16.0], color, width });
-                g.on_top.push(g::Line { start: [x + 16.0, y, z + 16.0], end: [x, y, z + 16.0], color, width });
-                g.on_top.push(g::Line { start: [x, y, z + 16.0], end: [x, y, z], color, width });
-            }
-        }
         if !self.debug_entry("visualize_collision_boxes") {
             return;
         }
@@ -166,6 +143,30 @@ impl Game<'_> {
         let mut fills: Vec<([[f64; 3]; 4], u32)> = Vec::new();
         let mut esp_fills: Vec<([[f64; 3]; 4], u32)> = Vec::new();
         let mut texts: Vec<([f64; 3], String, u32)> = Vec::new();
+        // One thin strip per side: a clean 16x16 outline at the surface,
+        // with no filled blocks inside the chunk.
+        for chunk in &suspicious_chunks {
+            if !self.world.chunks.contains_key(&(chunk.chunk_x, chunk.chunk_z)) {
+                continue;
+            }
+            let bx = chunk.chunk_x * 16;
+            let bz = chunk.chunk_z * 16;
+            let x = f64::from(bx);
+            let z = f64::from(bz);
+            let y_north = f64::from(self.column_height(HeightmapType::WorldSurface, bx + 8, bz)) + 0.035;
+            let y_south = f64::from(self.column_height(HeightmapType::WorldSurface, bx + 8, bz + 15)) + 0.035;
+            let y_west = f64::from(self.column_height(HeightmapType::WorldSurface, bx, bz + 8)) + 0.035;
+            let y_east = f64::from(self.column_height(HeightmapType::WorldSurface, bx + 15, bz + 8)) + 0.035;
+            let color = 0xD0B060FF;
+            for (min, max) in [
+                ([x, y_north, z], [x + 16.0, y_north + 0.045, z + 0.06]),
+                ([x, y_south, z + 15.94], [x + 16.0, y_south + 0.045, z + 16.0]),
+                ([x, y_west, z], [x + 0.06, y_west + 0.045, z + 16.0]),
+                ([x + 15.94, y_east, z], [x + 16.0, y_east + 0.045, z + 16.0]),
+            ] {
+                esp_fills.extend(g::cuboid_fill_quads(min, max).map(|q| (q, color)));
+            }
+        }
         if water {
             self.water_level_shapes(feet, &mut fills, &mut texts);
         }
