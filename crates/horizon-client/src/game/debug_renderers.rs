@@ -110,10 +110,29 @@ impl Game<'_> {
         let block_light = self.debug_entry("visualize_block_light_levels");
         let sky_light = self.debug_entry("visualize_sky_light_levels");
         let solid = self.debug_entry("visualize_solid_faces");
-        let amethyst_markers = self.extras.amethyst_markers.clone();
-        let artificial_light_markers = self.extras.artificial_light_markers.clone();
-        let suspicious_chunks = self.extras.suspicious_chunks.clone();
-        let block_entity_markers = self.extras.block_entity_markers.clone();
+        let scanner = &self.settings.extras;
+        let amethyst_markers = if scanner.scanner_enabled && scanner.scanner_amethyst {
+            self.extras.amethyst_markers.clone()
+        } else {
+            Vec::new()
+        };
+        let artificial_light_markers =
+            if scanner.scanner_enabled && scanner.scanner_artificial_lights {
+                self.extras.artificial_light_markers.clone()
+            } else {
+                Vec::new()
+            };
+        let suspicious_chunks = if scanner.scanner_enabled && scanner.scanner_chunks {
+            self.extras.suspicious_chunks.clone()
+        } else {
+            Vec::new()
+        };
+        let block_entity_markers =
+            if scanner.scanner_enabled && scanner.scanner_block_entities {
+                self.extras.block_entity_markers.clone()
+            } else {
+                Vec::new()
+            };
         let Some(p) = &self.player else {
             return;
         };
