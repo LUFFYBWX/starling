@@ -142,14 +142,14 @@ pub fn draw_lines_iter<'a>(
 }
 
 /// Fixed GUI-pixel hitbox for the scanner's floating open/close button.
-pub fn scanner_button_rect(width: f32) -> [f32; 4] {
-    [width - 62.0, 54.0, 58.0, 18.0]
+pub fn scanner_button_rect(_width: f32) -> [f32; 4] {
+    [4.0, 54.0, 58.0, 18.0]
 }
 
 /// Fixed GUI-pixel panel rectangle. Rows are returned separately so touch
 /// handling and drawing share exactly the same layout.
-pub fn scanner_panel_rect(width: f32) -> [f32; 4] {
-    [width - 132.0, 76.0, 128.0, 104.0]
+pub fn scanner_panel_rect(_width: f32) -> [f32; 4] {
+    [4.0, 76.0, 128.0, 104.0]
 }
 
 /// Draw the compact mobile scanner panel and its live ON/OFF states.
