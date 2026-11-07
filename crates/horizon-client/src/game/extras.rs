@@ -24,7 +24,7 @@ pub(super) struct ExtrasState {
     minimap: Minimap,
     /// The dimension the minimap's tiles belong to.
     minimap_dim: Option<Dim>,
-    /// Loaded-world budding-amethyst locations, refreshed periodically.
+    /// Loaded-world fully-grown amethyst cluster locations, refreshed periodically.
     pub(super) amethyst_markers: Vec<horizon_client::amethyst_scanner::AmethystMarker>,
     /// Artificial-light sources and the blocks their light reaches in loaded chunks.
     pub(super) artificial_light_markers: Vec<horizon_client::amethyst_scanner::ArtificialLightMarker>,
@@ -266,6 +266,13 @@ impl Game<'_> {
                 center,
                 radius,
             );
+        let small_amethyst_buds =
+            horizon_client::amethyst_scanner::scan_loaded_small_buds_near(
+                &self.world,
+                self.res.facts(),
+                center,
+                radius,
+            );
         self.extras.block_entity_markers =
             horizon_client::amethyst_scanner::scan_loaded_block_entities_near(
                 &self.world, self.res.facts(), center, radius,
@@ -274,6 +281,7 @@ impl Game<'_> {
             horizon_client::amethyst_scanner::score_suspicious_chunks(
                 &self.extras.block_entity_markers,
                 &self.extras.amethyst_markers,
+                &small_amethyst_buds,
                 &self.extras.artificial_light_markers,
             );
         self.extras.amethyst_scanned_at = Some(now);
