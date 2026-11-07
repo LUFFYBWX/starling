@@ -111,6 +111,7 @@ impl Game<'_> {
         let solid = self.debug_entry("visualize_solid_faces");
         let amethyst_markers = self.extras.amethyst_markers.clone();
         let artificial_light_markers = self.extras.artificial_light_markers.clone();
+        let suspicious_chunks = self.extras.suspicious_chunks.clone();
         let Some(p) = &self.player else {
             return;
         };
@@ -132,6 +133,18 @@ impl Game<'_> {
         }
         if solid {
             self.solid_face_shapes(eye, &mut fills);
+        }
+        // Draw full-height outlines for suspicious chunks directly in the
+        // world, always on top so walls do not hide the clue.
+        for (chunk_x, chunk_z) in suspicious_chunks {
+            let Some(chunk) = self.world.chunks.get(&(chunk_x, chunk_z)) else {
+                continue;
+            };
+            let min_y = f64::from(chunk.min_y());
+            let max_y = min_y + chunk.sections.len() as f64 * 16.0;
+            let min = [f64::from(chunk_x * 16), min_y, f64::from(chunk_z * 16)];
+            let max = [min[0] + 16.0, max_y, min[2] + 16.0];
+            g.cuboid_on_top(min, max, 0xFFB040FF, 3.0);
         }
         // Highlight detected grown clusters near the camera without requiring
         // the debug-renderer options screen to be enabled.
