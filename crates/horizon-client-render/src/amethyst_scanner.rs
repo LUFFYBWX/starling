@@ -166,6 +166,18 @@ pub struct ChunkSuspicion {
     pub artificial_lights: u16,
 }
 
+/// Whether a container is backed by a generated loot table in its saved chunk data.
+/// Horizon preserves both unrolled loot tables and the rolled result for containers
+/// whose loot was opened, so generated structure chests do not become ESP evidence.
+fn has_generated_loot_table(chunk: &Chunk, position: (i32, i32, i32)) -> bool {
+    let Some(saved) = chunk.saved.as_ref() else {
+        return false;
+    };
+    saved.block_entity_sources.iter().any(|(pos, tag)| {
+        *pos == position && tag.get("LootTable").is_some()
+    }) || saved.rolled_loot.iter().any(|loot| loot.pos == position)
+}
+
 /// Finds block entities whose block state is a useful ESP target. The world
 /// map contains only block entities in currently loaded chunks.
 pub fn scan_loaded_block_entities_near(
@@ -202,6 +214,15 @@ pub fn scan_loaded_block_entities_near(
         }
         let name = facts.get(world.block(x, y, z)).name.as_ref();
         if !TARGETS.contains(&name) {
+            return None;
+        }
+        // Naturally generated chests often carry a structure loot table. Skip
+        // both unopened tables and their tracked rolled form after first opening.
+        if (name == "minecraft:chest" || name == "minecraft:trapped_chest")
+            && world.chunks.get(&(cx, cz)).is_some_and(|chunk| {
+                has_generated_loot_table(chunk, (x, y, z))
+            })
+        {
             return None;
         }
         let kind = if name == "minecraft:trial_spawner" || name == "minecraft:vault" || name == "minecraft:mob_spawner" { 3 }
@@ -289,6 +310,28 @@ pub fn score_suspicious_chunks(
 mod tests {
     use super::*;
     use crate::chunk::{Chunk, ColumnLayout};
+
+    #[test]
+    fn generated_loot_chest_is_recognized_after_loot_was_rolled() {
+        use crate::chunk::{ChunkExtras, RolledLoot};
+        use horizon_world::nbt::Tag;
+        use std::sync::Arc;
+
+        let position = (8, 64, 8);
+        let mut chunk = Chunk::empty(0, 0);
+        let extras = ChunkExtras {
+            rolled_loot: vec![RolledLoot {
+                pos: position,
+                table: "minecraft:chests/simple_dungeon".into(),
+                seed: None,
+                items: Tag::List(Vec::new()),
+            }],
+            ..Default::default()
+        };
+        chunk.saved = Some(Arc::new(extras));
+        assert!(has_generated_loot_table(&chunk, position));
+        assert!(!has_generated_loot_table(&chunk, (9, 64, 8)));
+    }
 
     #[test]
     fn common_generated_storage_alone_does_not_flag_a_chunk() {
