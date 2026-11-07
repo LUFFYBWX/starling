@@ -242,7 +242,7 @@ impl Game<'_> {
             (player.position.x.floor() as i32).div_euclid(16),
             (player.position.z.floor() as i32).div_euclid(16),
         );
-        let radius = self.settings.render_distance.max(2) as i32;
+        let radius = (self.settings.render_distance.max(2) as i32).min(6);
         self.extras.amethyst_markers =
             horizon_client::amethyst_scanner::scan_loaded_chunks_near(
                 &self.world,
@@ -309,24 +309,37 @@ impl Game<'_> {
             };
             extras_hud::draw_minimap(batch, atlas, &mut corners, &look);
         }
-        if !self.extras.amethyst_markers.is_empty() {
+        if self.screen == Screen::Playing && self.title.is_none() && !self.ui.hide_gui {
             let count = format!("Amethyst: {}", self.extras.amethyst_markers.len());
             let nearest = self.player.as_ref().and_then(|player| {
-                self.extras.amethyst_markers.iter().min_by_key(|marker| {
-                    let dx = f64::from(marker.x) + 0.5 - player.position.x;
-                    let dy = f64::from(marker.y) + 0.5 - player.position.y;
-                    let dz = f64::from(marker.z) + 0.5 - player.position.z;
-                    (dx * dx + dy * dy + dz * dz) as i64
+                self.extras.amethyst_markers.iter().min_by(|a, b| {
+                    let distance = |marker: &horizon_client::amethyst_scanner::AmethystMarker| {
+                        let dx = f64::from(marker.x) + 0.5 - player.position.x;
+                        let dy = f64::from(marker.y) + 0.5 - player.position.y;
+                        let dz = f64::from(marker.z) + 0.5 - player.position.z;
+                        dx * dx + dy * dy + dz * dz
+                    };
+                    distance(a).total_cmp(&distance(b))
                 })
             });
-            if let Some(marker) = nearest {
-                let position = format!("Nearest: {}, {}, {}", marker.x, marker.y, marker.z);
+            let position = nearest.map(|marker| {
+                format!("Nearest: {}, {}, {}", marker.x, marker.y, marker.z)
+            });
+            if let Some(position) = position {
                 horizon_client::extras_hud::draw_lines(
                     batch,
                     &self.gui.atlas,
                     &mut corners,
                     Corner::TopRight,
                     &[(count.as_str(), 0xDDAAFF), (position.as_str(), 0xFFFFFF)],
+                );
+            } else {
+                horizon_client::extras_hud::draw_lines(
+                    batch,
+                    &self.gui.atlas,
+                    &mut corners,
+                    Corner::TopRight,
+                    &[(count.as_str(), 0xDDAAFF)],
                 );
             }
         }
