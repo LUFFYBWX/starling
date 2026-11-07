@@ -28,6 +28,8 @@ pub(super) struct ExtrasState {
     amethyst_markers: Vec<horizon_client::amethyst_scanner::AmethystMarker>,
     /// Selected artificial-light blocks in loaded chunks.
     artificial_light_markers: Vec<horizon_client::amethyst_scanner::ArtificialLightMarker>,
+    /// Chunks whose amethyst clues have nearby selected artificial lights.
+    suspicious_chunks: std::collections::HashSet<(i32, i32)>,
     amethyst_scanned_at: Option<Instant>,
     /// Auto-reconnect's attempts at the current server.
     reconnect: Tracker,
@@ -229,7 +231,7 @@ impl Game<'_> {
         if self.screen != Screen::Playing || self.title.is_some() || self.player.is_none() {
             self.extras.amethyst_markers.clear();
             self.extras.artificial_light_markers.clear();
-            self.extras.minimap.set_marked_chunks(std::collections::HashSet::new());
+            self.extras.suspicious_chunks.clear();
             self.extras.amethyst_scanned_at = None;
             return;
         }
@@ -275,7 +277,7 @@ impl Game<'_> {
                 suspicious_chunks.insert((cx, cz));
             }
         }
-        self.extras.minimap.set_marked_chunks(suspicious_chunks);
+        self.extras.suspicious_chunks = suspicious_chunks;
         self.extras.amethyst_scanned_at = Some(now);
     }
     /// A mod's zoom in effect (`render.set-zoom`): (factor, smooth, turning
