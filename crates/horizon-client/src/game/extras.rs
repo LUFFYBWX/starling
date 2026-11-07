@@ -32,6 +32,10 @@ pub(super) struct ExtrasState {
     pub(super) block_entity_markers: Vec<horizon_client::amethyst_scanner::BlockEntityMarker>,
     /// Chunks ranked by nearby block entities, amethyst and artificial light.
     pub(super) suspicious_chunks: Vec<horizon_client::amethyst_scanner::ChunkSuspicion>,
+    /// Whether the in-game scanner control panel is open.
+    pub(super) scanner_menu_open: bool,
+    /// Finger currently interacting with the scanner panel, so it cannot move the player.
+    pub(super) scanner_menu_touch: Option<u64>,
     amethyst_scanned_at: Option<Instant>,
     /// Auto-reconnect's attempts at the current server.
     reconnect: Tracker,
