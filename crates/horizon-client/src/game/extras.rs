@@ -26,7 +26,7 @@ pub(super) struct ExtrasState {
     minimap_dim: Option<Dim>,
     /// Loaded-world budding-amethyst locations, refreshed periodically.
     pub(super) amethyst_markers: Vec<horizon_client::amethyst_scanner::AmethystMarker>,
-    /// Selected artificial-light blocks in loaded chunks.
+    /// Artificial-light sources and the blocks their light reaches in loaded chunks.
     pub(super) artificial_light_markers: Vec<horizon_client::amethyst_scanner::ArtificialLightMarker>,
     /// Loaded storage and utility block entities, for the through-wall ESP.
     pub(super) block_entity_markers: Vec<horizon_client::amethyst_scanner::BlockEntityMarker>,
