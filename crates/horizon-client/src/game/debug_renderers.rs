@@ -164,6 +164,18 @@ impl Game<'_> {
             let y_west = f64::from(self.column_height(HeightmapType::WorldSurface, bx, bz + 8)) + 0.035;
             let y_east = f64::from(self.column_height(HeightmapType::WorldSurface, bx + 15, bz + 8)) + 0.035;
             let color = 0xD0B060FF;
+            // The displayed percentage is the scanner's existing 0..100
+            // evidence score, computed from the same filter criteria.
+            let label_y = f64::from(self.column_height(
+                HeightmapType::WorldSurface,
+                bx + 8,
+                bz + 8,
+            )) + 1.25;
+            texts.push((
+                [x + 8.0, label_y, z + 8.0],
+                format!("BASE? {}%", chunk.score),
+                0xFFE0A0FF,
+            ));
             for (min, max) in [
                 ([x, y_north, z], [x + 16.0, y_north + 0.045, z + 0.06]),
                 ([x, y_south, z + 15.94], [x + 16.0, y_south + 0.045, z + 16.0]),
