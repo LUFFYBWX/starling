@@ -107,7 +107,7 @@ impl Game<'_> {
         let block_light = self.debug_entry("visualize_block_light_levels");
         let sky_light = self.debug_entry("visualize_sky_light_levels");
         let solid = self.debug_entry("visualize_solid_faces");
-        let amethyst_markers = &self.extras.amethyst_markers;
+        let amethyst_markers = self.extras.amethyst_markers.clone();
         let Some(p) = &self.player else {
             return;
         };
