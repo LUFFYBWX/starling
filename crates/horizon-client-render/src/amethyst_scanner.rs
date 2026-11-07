@@ -157,6 +157,9 @@ pub struct ChunkSuspicion {
     pub chunk_x: i32,
     pub chunk_z: i32,
     pub score: u8,
+    /// Vertical bounds of the evidence that made this chunk suspicious.
+    pub min_y: i32,
+    pub max_y: i32,
     pub block_entities: u16,
     pub shulkers: u16,
     pub clusters: u16,
@@ -241,8 +244,18 @@ pub fn score_suspicious_chunks(
         // Requiring at least one detected block entity prevents natural
         // geodes or lighting alone from flagging an entire region.
         if score >= 35 {
+            // Restrict the ESP outline to the vertical span containing actual
+            // evidence, with a small margin so the player can see the nearby
+            // cavity without highlighting the entire world-height column.
+            let evidence_y = nearby_entities.iter().map(|m| m.y)
+                .chain(nearby_clusters.iter().map(|m| m.y))
+                .chain(lights.iter().filter(|m| in_neighborhood(m.x.div_euclid(16), m.z.div_euclid(16))).map(|m| m.y));
+            let (evidence_min, evidence_max) = evidence_y.fold((i32::MAX, i32::MIN), |(lo, hi), y| (lo.min(y), hi.max(y)));
+            let min_y = evidence_min.saturating_sub(8);
+            let max_y = evidence_max.saturating_add(9);
             results.push(ChunkSuspicion {
                 chunk_x: cx, chunk_z: cz, score: score.min(100) as u8,
+                min_y, max_y,
                 block_entities: nearby_entities.len().min(u16::MAX as usize) as u16,
                 shulkers: shulkers.min(u16::MAX as usize) as u16,
                 clusters: nearby_clusters.len().min(u16::MAX as usize) as u16,
