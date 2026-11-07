@@ -24,20 +24,21 @@ pub fn scan_chunk(chunk: &Chunk, target_state: u32) -> Vec<AmethystMarker> {
     for (section_index, section) in chunk.sections.iter().enumerate() {
         let base_y = chunk.min_y() + section_index as i32 * 16;
 
-        if let Some(state) = section.blocks.uniform() {
-            if state == target_state {
-                for local_y in 0..16 {
-                    for local_z in 0..16 {
-                        for local_x in 0..16 {
-                            found.push(AmethystMarker {
-                                x: base_x + local_x,
-                                y: base_y + local_y,
-                                z: base_z + local_z,
-                            });
-                        }
+        if section.is_uniform(target_state) {
+            for local_y in 0..16 {
+                for local_z in 0..16 {
+                    for local_x in 0..16 {
+                        found.push(AmethystMarker {
+                            x: base_x + local_x,
+                            y: base_y + local_y,
+                            z: base_z + local_z,
+                        });
                     }
                 }
             }
+            continue;
+        }
+        if section.is_uniform(0) {
             continue;
         }
 
