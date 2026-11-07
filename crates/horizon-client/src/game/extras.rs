@@ -392,6 +392,20 @@ impl Game<'_> {
                 batch, &self.gui.atlas, &mut corners, Corner::TopRight, &lines,
             );
         }
+        #[cfg(target_os = "android")]
+        if self.screen == Screen::Playing && self.title.is_none() && !self.ui.hide_gui {
+            let scanner = &self.settings.extras;
+            horizon_client::extras_hud::draw_scanner_controls(
+                batch,
+                &self.gui.atlas,
+                self.extras.scanner_menu_open,
+                scanner.scanner_enabled,
+                scanner.scanner_chunks,
+                scanner.scanner_amethyst,
+                scanner.scanner_block_entities,
+                scanner.scanner_artificial_lights,
+            );
+        }
         if mod_panels {
             self.draw_mod_panels(batch, &mut corners);
         }
