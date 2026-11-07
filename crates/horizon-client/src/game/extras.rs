@@ -229,6 +229,7 @@ impl Game<'_> {
         if self.screen != Screen::Playing || self.title.is_some() || self.player.is_none() {
             self.extras.amethyst_markers.clear();
             self.extras.artificial_light_markers.clear();
+            self.extras.minimap.set_marked_chunks(std::collections::HashSet::new());
             self.extras.amethyst_scanned_at = None;
             return;
         }
@@ -260,6 +261,21 @@ impl Game<'_> {
                 center,
                 radius,
             );
+        // A chunk becomes a clue only when a grown cluster has at least
+        // two selected artificial-light blocks in its surrounding 3x3 chunks.
+        // This is a heuristic, not proof that a player built there.
+        let mut suspicious_chunks = std::collections::HashSet::new();
+        for cluster in &self.extras.amethyst_markers {
+            let (cx, cz) = (cluster.x.div_euclid(16), cluster.z.div_euclid(16));
+            let nearby_lights = self.extras.artificial_light_markers.iter().filter(|light| {
+                let (lx, lz) = (light.x.div_euclid(16), light.z.div_euclid(16));
+                (lx - cx).abs() <= 1 && (lz - cz).abs() <= 1
+            }).count();
+            if nearby_lights >= 2 {
+                suspicious_chunks.insert((cx, cz));
+            }
+        }
+        self.extras.minimap.set_marked_chunks(suspicious_chunks);
         self.extras.amethyst_scanned_at = Some(now);
     }
     /// A mod's zoom in effect (`render.set-zoom`): (factor, smooth, turning
