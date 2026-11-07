@@ -16608,6 +16608,51 @@ impl Game<'_> {
                 return;
             };
             self.pad.touch.viewport(size.width, size.height);
+            // Scanner HUD touches are consumed before the normal movement/look
+            // controls, so tapping a toggle never moves or turns the player.
+            if self.extras.scanner_menu_touch == Some(touch.id) {
+                if matches!(touch.phase, TouchPhase::Ended | TouchPhase::Cancelled) {
+                    self.extras.scanner_menu_touch = None;
+                }
+                return;
+            }
+            if self.screen == Screen::Playing
+                && self.title.is_none()
+                && touch.phase == TouchPhase::Started
+            {
+                let hud = HudBatch::new([size.width, size.height]);
+                let x = touch.location.x as f32 / hud.scale;
+                let y = touch.location.y as f32 / hud.scale;
+                let button = horizon_client::extras_hud::scanner_button_rect(hud.width);
+                let panel = horizon_client::extras_hud::scanner_panel_rect(hud.width);
+                let inside = |r: [f32; 4]| x >= r[0] && y >= r[1] && x < r[0] + r[2] && y < r[1] + r[3];
+                let mut consumed = false;
+                if inside(button) {
+                    self.extras.scanner_menu_open = !self.extras.scanner_menu_open;
+                    consumed = true;
+                } else if self.extras.scanner_menu_open {
+                    if inside(panel) {
+                        let row = ((y - (panel[1] + 20.0)) / 16.0).floor() as i32;
+                        match row {
+                            0 => self.settings.extras.scanner_enabled = !self.settings.extras.scanner_enabled,
+                            1 => self.settings.extras.scanner_chunks = !self.settings.extras.scanner_chunks,
+                            2 => self.settings.extras.scanner_amethyst = !self.settings.extras.scanner_amethyst,
+                            3 => self.settings.extras.scanner_block_entities = !self.settings.extras.scanner_block_entities,
+                            4 => self.settings.extras.scanner_artificial_lights = !self.settings.extras.scanner_artificial_lights,
+                            _ => {}
+                        }
+                    } else {
+                        self.extras.scanner_menu_open = false;
+                    }
+                    consumed = true;
+                }
+                if consumed {
+                    self.extras.scanner_menu_touch = Some(touch.id);
+                    self.audio.play_button_click();
+                    self.android_touch_haptic(10);
+                    return;
+                }
+            }
             if self.pad.touch.editor.is_some() {
                 if touch.phase == TouchPhase::Cancelled {
                     self.pad.touch.cancel_editor_gesture();
