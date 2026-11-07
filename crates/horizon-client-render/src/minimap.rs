@@ -12,7 +12,7 @@ use crate::{
     fast_hash::FxHashMap,
     world::World,
 };
-use std::time::{Duration, Instant};
+use std::{collections::HashSet, time::{Duration, Instant}};
 
 /// The image's side in texels.
 pub const SIZE: usize = 128;
@@ -263,10 +263,19 @@ pub struct Minimap {
     composed: Option<View>,
     /// Tiles changed since the image was composed.
     changed: bool,
+    /// Chunks whose amethyst clues have nearby selected artificial lights.
+    marked_chunks: HashSet<(i32, i32)>,
     /// The composed image, `SIZE` x `SIZE` RGBA.
     pub image: Vec<u8>,
 }
 impl Minimap {
+    /// Replace the chunks highlighted as suspicious by the scanner.
+    pub fn set_marked_chunks(&mut self, chunks: HashSet<(i32, i32)>) {
+        if self.marked_chunks != chunks {
+            self.marked_chunks = chunks;
+            self.changed = true;
+        }
+    }
     /// Forget everything (a new world or dimension, or the minimap turned off).
     pub fn clear(&mut self) {
         let palette = self.palette.take();
@@ -381,6 +390,17 @@ impl Minimap {
                         packed_rgba(color & !WALL, b)
                     }
                     _ => UNKNOWN,
+                };
+                let rgba = if self.marked_chunks.contains(&(x.div_euclid(16), z.div_euclid(16))) {
+                    // Warm red tint makes the whole suspect chunk visible at every zoom.
+                    [
+                        ((u16::from(rgba[0]) + 255) / 2) as u8,
+                        (u16::from(rgba[1]) / 2) as u8,
+                        (u16::from(rgba[2]) / 2) as u8,
+                        rgba[3],
+                    ]
+                } else {
+                    rgba
                 };
                 self.image[o..o + 4].copy_from_slice(&rgba);
             }
