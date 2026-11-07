@@ -588,7 +588,7 @@ mod tests {
             AmethystMarker { x: 11, y: 20, z: 8 },
             AmethystMarker { x: 12, y: 20, z: 8 },
         ];
-        let scored = score_suspicious_chunks(&entities, &clusters, &[], &[]);
+        let scored = score_suspicious_chunks(&entities, &clusters, &[], &[], 45);
         assert!(!scored.is_empty());
         assert!(scored[0].clusters >= 4);
     }
