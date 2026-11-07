@@ -19,6 +19,8 @@ pub struct ArtificialLightMarker {
     pub x: i32,
     pub y: i32,
     pub z: i32,
+    /// True for the torch/lantern that emitted the light; false for an illuminated block.
+    pub is_source: bool,
 }
 
 /// Scan one already-loaded chunk for any of the supplied block-state IDs.
@@ -136,10 +138,12 @@ pub fn scan_loaded_artificial_lights_near(
         world, &source_states, facts.air.0, center_chunk, radius_chunks,
     );
     let mut illuminated = HashSet::new();
+    let mut source_markers = HashSet::new();
     let min_chunk = (center_chunk.0 - radius_chunks.max(0), center_chunk.1 - radius_chunks.max(0));
     let max_chunk = (center_chunk.0 + radius_chunks.max(0), center_chunk.1 + radius_chunks.max(0));
 
     for source in sources {
+        source_markers.insert((source.x, source.y, source.z));
         let source_state = world.block(source.x, source.y, source.z);
         let initial = facts.get(source_state).emission.min(15);
         if initial == 0 {
@@ -179,8 +183,9 @@ pub fn scan_loaded_artificial_lights_near(
         }
     }
     let mut markers: Vec<_> = illuminated.into_iter()
-        .map(|(x, y, z)| ArtificialLightMarker { x, y, z })
+        .map(|(x, y, z)| ArtificialLightMarker { x, y, z, is_source: false })
         .collect();
+    markers.extend(source_markers.into_iter().map(|(x, y, z)| ArtificialLightMarker { x, y, z, is_source: true }));
     markers.sort_by_key(|m| (m.x, m.y, m.z));
     markers
 }
@@ -278,7 +283,7 @@ pub fn score_suspicious_chunks(
         let in_neighborhood = |x: i32, z: i32| (x - cx).abs() <= 1 && (z - cz).abs() <= 1;
         let nearby_entities: Vec<_> = block_entities.iter().filter(|m| m.kind != 3 && in_neighborhood(m.x.div_euclid(16), m.z.div_euclid(16))).collect();
         let nearby_clusters: Vec<_> = clusters.iter().filter(|m| in_neighborhood(m.x.div_euclid(16), m.z.div_euclid(16))).collect();
-        let nearby_lights = lights.iter().filter(|m| in_neighborhood(m.x.div_euclid(16), m.z.div_euclid(16))).count();
+        let nearby_lights = lights.iter().filter(|m| m.is_source && in_neighborhood(m.x.div_euclid(16), m.z.div_euclid(16))).count();
         let shulkers = nearby_entities.iter().filter(|m| m.kind == 1).count();
         let storage = nearby_entities.iter().filter(|m| m.kind == 0).count();
         let utilities = nearby_entities.len() - shulkers - storage;
