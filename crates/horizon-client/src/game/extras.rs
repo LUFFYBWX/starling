@@ -26,6 +26,8 @@ pub(super) struct ExtrasState {
     minimap_dim: Option<Dim>,
     /// Loaded-world budding-amethyst locations, refreshed periodically.
     amethyst_markers: Vec<horizon_client::amethyst_scanner::AmethystMarker>,
+    /// Selected artificial-light blocks in loaded chunks.
+    artificial_light_markers: Vec<horizon_client::amethyst_scanner::ArtificialLightMarker>,
     amethyst_scanned_at: Option<Instant>,
     /// Auto-reconnect's attempts at the current server.
     reconnect: Tracker,
@@ -226,6 +228,7 @@ impl Game<'_> {
     fn update_amethyst_scanner(&mut self) {
         if self.screen != Screen::Playing || self.title.is_some() || self.player.is_none() {
             self.extras.amethyst_markers.clear();
+            self.extras.artificial_light_markers.clear();
             self.extras.amethyst_scanned_at = None;
             return;
         }
@@ -245,6 +248,13 @@ impl Game<'_> {
         let radius = (self.settings.render_distance.max(2) as i32).min(6);
         self.extras.amethyst_markers =
             horizon_client::amethyst_scanner::scan_loaded_chunks_near(
+                &self.world,
+                self.res.facts(),
+                center,
+                radius,
+            );
+        self.extras.artificial_light_markers =
+            horizon_client::amethyst_scanner::scan_loaded_artificial_lights_near(
                 &self.world,
                 self.res.facts(),
                 center,
@@ -310,7 +320,8 @@ impl Game<'_> {
             extras_hud::draw_minimap(batch, atlas, &mut corners, &look);
         }
         if self.screen == Screen::Playing && self.title.is_none() && !self.ui.hide_gui {
-            let count = format!("Amethyst: {}", self.extras.amethyst_markers.len());
+            let count = format!("Clusters: {}", self.extras.amethyst_markers.len());
+            let lights = format!("Artificial lights: {}", self.extras.artificial_light_markers.len());
             let nearest = self.player.as_ref().and_then(|player| {
                 self.extras.amethyst_markers.iter().min_by(|a, b| {
                     let distance = |marker: &horizon_client::amethyst_scanner::AmethystMarker| {
@@ -331,7 +342,7 @@ impl Game<'_> {
                     &self.gui.atlas,
                     &mut corners,
                     Corner::TopRight,
-                    &[(count.as_str(), 0xDDAAFF), (position.as_str(), 0xFFFFFF)],
+                    &[(count.as_str(), 0xDDAAFF), (lights.as_str(), 0xFFCC66), (position.as_str(), 0xFFFFFF)],
                 );
             } else {
                 horizon_client::extras_hud::draw_lines(
@@ -339,7 +350,7 @@ impl Game<'_> {
                     &self.gui.atlas,
                     &mut corners,
                     Corner::TopRight,
-                    &[(count.as_str(), 0xDDAAFF)],
+                    &[(count.as_str(), 0xDDAAFF), (lights.as_str(), 0xFFCC66)],
                 );
             }
         }
