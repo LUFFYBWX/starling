@@ -12,7 +12,7 @@ use horizon_client::{
     reconnect::{Retry, Tracker},
     title::Mode,
 };
-use std::time::Duration;
+use std::time::{Duration, Instant};
 use winit::event::MouseButton;
 
 #[derive(Default)]
@@ -24,6 +24,9 @@ pub(super) struct ExtrasState {
     minimap: Minimap,
     /// The dimension the minimap's tiles belong to.
     minimap_dim: Option<Dim>,
+    /// Loaded-world budding-amethyst locations, refreshed periodically.
+    amethyst_markers: Vec<horizon_client::amethyst_scanner::AmethystMarker>,
+    amethyst_scanned_at: Option<Instant>,
     /// Auto-reconnect's attempts at the current server.
     reconnect: Tracker,
 }
@@ -58,6 +61,7 @@ impl Game<'_> {
             self.extras.mouse = [false; 2];
         }
         self.update_minimap();
+        self.update_amethyst_scanner();
         // For mods (`render.frame-stats`, `native_frame_rate`).
         let now = self.extras_now();
         self.extras.fps.record(now, elapsed.as_secs_f32() * 1000.0);
@@ -218,6 +222,36 @@ impl Game<'_> {
             rgba: self.extras.minimap.image.clone(),
         });
     }
+    /// Scan nearby resident chunks for budding amethyst at a low cadence.
+    fn update_amethyst_scanner(&mut self) {
+        if self.screen != Screen::Playing || self.title.is_some() || self.player.is_none() {
+            self.extras.amethyst_markers.clear();
+            self.extras.amethyst_scanned_at = None;
+            return;
+        }
+        let now = Instant::now();
+        if self.extras.amethyst_scanned_at.is_some_and(|last| {
+            now.duration_since(last) < Duration::from_secs(3)
+        }) {
+            return;
+        }
+        let Some(player) = self.player.as_ref() else {
+            return;
+        };
+        let center = (
+            (player.position.x.floor() as i32).div_euclid(16),
+            (player.position.z.floor() as i32).div_euclid(16),
+        );
+        let radius = self.settings.render_distance.max(2) as i32;
+        self.extras.amethyst_markers =
+            horizon_client::amethyst_scanner::scan_loaded_chunks_near(
+                &self.world,
+                self.res.facts(),
+                center,
+                radius,
+            );
+        self.extras.amethyst_scanned_at = Some(now);
+    }
     /// A mod's zoom in effect (`render.set-zoom`): (factor, smooth, turning
     /// scale); none is 1.
     fn zoom_now(&self) -> (f32, bool, f64) {
@@ -274,6 +308,27 @@ impl Game<'_> {
                 north,
             };
             extras_hud::draw_minimap(batch, atlas, &mut corners, &look);
+        }
+        if !self.extras.amethyst_markers.is_empty() {
+            let count = format!("Amethyst: {}", self.extras.amethyst_markers.len());
+            let nearest = self.player.as_ref().and_then(|player| {
+                self.extras.amethyst_markers.iter().min_by_key(|marker| {
+                    let dx = f64::from(marker.x) + 0.5 - player.position.x;
+                    let dy = f64::from(marker.y) + 0.5 - player.position.y;
+                    let dz = f64::from(marker.z) + 0.5 - player.position.z;
+                    (dx * dx + dy * dy + dz * dz) as i64
+                })
+            });
+            if let Some(marker) = nearest {
+                let position = format!("Nearest: {}, {}, {}", marker.x, marker.y, marker.z);
+                horizon_client::extras_hud::draw_lines(
+                    batch,
+                    &self.gui.atlas,
+                    &mut corners,
+                    Corner::TopRight,
+                    &[(count.as_str(), 0xDDAAFF), (position.as_str(), 0xFFFFFF)],
+                );
+            }
         }
         if mod_panels {
             self.draw_mod_panels(batch, &mut corners);
