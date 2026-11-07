@@ -154,16 +154,11 @@ impl Game<'_> {
             let x = f64::from(bx);
             let z = f64::from(bz);
             let center_surface = self.column_height(HeightmapType::WorldSurface, bx + 8, bz + 8);
-            texts.push((
-                [x + 8.0, f64::from(center_surface) + 1.2, z + 8.0],
-                format!("Base: {}%", chunk.score),
-                0xFFFF_D080,
-            ));
             let y_north = f64::from(self.column_height(HeightmapType::WorldSurface, bx + 8, bz)) + 0.035;
             let y_south = f64::from(self.column_height(HeightmapType::WorldSurface, bx + 8, bz + 15)) + 0.035;
             let y_west = f64::from(self.column_height(HeightmapType::WorldSurface, bx, bz + 8)) + 0.035;
             let y_east = f64::from(self.column_height(HeightmapType::WorldSurface, bx + 15, bz + 8)) + 0.035;
-            let color = 0xD0B060FF;
+            let color = 0xF0B040FF;
             // The displayed percentage is the scanner's existing 0..100
             // evidence score, computed from the same filter criteria.
             let label_y = f64::from(self.column_height(
@@ -177,10 +172,10 @@ impl Game<'_> {
                 0xFFE0A0FF,
             ));
             for (min, max) in [
-                ([x, y_north, z], [x + 16.0, y_north + 0.045, z + 0.06]),
-                ([x, y_south, z + 15.94], [x + 16.0, y_south + 0.045, z + 16.0]),
-                ([x, y_west, z], [x + 0.06, y_west + 0.045, z + 16.0]),
-                ([x + 15.94, y_east, z], [x + 16.0, y_east + 0.045, z + 16.0]),
+                ([x, y_north, z], [x + 16.0, y_north + 0.12, z + 0.18]),
+                ([x + 0.0, y_south, z + 15.82], [x + 16.0, y_south + 0.12, z + 16.0]),
+                ([x, y_west, z], [x + 0.18, y_west + 0.12, z + 16.0]),
+                ([x + 15.82, y_east, z], [x + 16.0, y_east + 0.12, z + 16.0]),
             ] {
                 esp_fills.extend(g::cuboid_fill_quads(min, max).map(|q| (q, color)));
             }
@@ -305,6 +300,11 @@ impl Game<'_> {
         // `Gizmos.billboardText`: centred, without a background.
         let mut patches = Vec::new();
         for (at, text, color) in texts {
+            let scale = if text.starts_with("BASE? ") {
+                0.56
+            } else {
+                TEXT_SCALE
+            };
             patches.extend(self.name_tag_quads(
                 glam::DVec3::from_array(at) - camera,
                 &[(Text::literal(text).with_color(color & 0xFF_FFFF), 0.0)],
@@ -312,7 +312,7 @@ impl Game<'_> {
                 false,
                 2,
                 0,
-                g::billboard_text_unit(TEXT_SCALE),
+                g::billboard_text_unit(scale),
                 out,
             ));
         }
