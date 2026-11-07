@@ -137,6 +137,26 @@ pub fn scan_loaded_chunks_near(
     scan_loaded_states_near(world, &states, facts.air.0, center_chunk, radius_chunks)
 }
 
+/// Scan loaded chunks for any unfinished amethyst bud. A geode containing one
+/// of these is excluded from suspicion scoring, even if it also has mature
+/// clusters: the requested signal is a fully-grown geode.
+pub fn scan_loaded_small_buds_near(
+    world: &crate::world::World,
+    facts: &crate::blocks::BlockFacts,
+    center_chunk: (i32, i32),
+    radius_chunks: i32,
+) -> Vec<AmethystMarker> {
+    let states = state_ids_named(
+        facts,
+        &[
+            "minecraft:small_amethyst_bud",
+            "minecraft:medium_amethyst_bud",
+            "minecraft:large_amethyst_bud",
+        ],
+    );
+    scan_loaded_states_near(world, &states, facts.air.0, center_chunk, radius_chunks)
+}
+
 /// Scan loaded chunks for blocks illuminated by selected artificial light sources.
 /// Natural emitters (including lava) are never used as propagation origins.
 pub fn scan_loaded_artificial_lights_near(
@@ -294,78 +314,162 @@ pub fn scan_loaded_block_entities_near(
     }).collect()
 }
 
-/// Scores loaded chunks using block entities as the primary evidence. Nearby
-/// amethyst clusters and artificial lights only strengthen an existing lead.
+/// Groups mature clusters that belong to the same compact geode area.
+/// Vanilla geodes are small; a 12-block neighborhood keeps nearby geodes apart.
+fn grown_geode_groups(clusters: &[AmethystMarker]) -> Vec<Vec<AmethystMarker>> {
+    let mut remaining = clusters.to_vec();
+    let mut groups = Vec::new();
+    while !remaining.is_empty() {
+        let mut group = vec![remaining.swap_remove(0)];
+        let mut changed = true;
+        while changed {
+            changed = false;
+            let mut index = 0;
+            while index < remaining.len() {
+                let joins_group = group.iter().any(|grown| {
+                    let dx = i64::from(grown.x) - i64::from(remaining[index].x);
+                    let dy = i64::from(grown.y) - i64::from(remaining[index].y);
+                    let dz = i64::from(grown.z) - i64::from(remaining[index].z);
+                    dx * dx + dy * dy + dz * dz <= 12 * 12
+                });
+                if joins_group {
+                    group.push(remaining.swap_remove(index));
+                    changed = true;
+                } else {
+                    index += 1;
+                }
+            }
+        }
+        groups.push(group);
+    }
+    groups
+}
+
+/// Scores chunks around fully-grown geodes. Mature clusters are the primary
+/// signal; nearby storage, utility blocks, and artificial lights reinforce it.
+/// Any geode group containing a small/medium/large bud is rejected entirely.
 pub fn score_suspicious_chunks(
     block_entities: &[BlockEntityMarker],
     clusters: &[AmethystMarker],
+    small_buds: &[AmethystMarker],
     lights: &[ArtificialLightMarker],
 ) -> Vec<ChunkSuspicion> {
     use std::collections::HashSet;
-    let mut candidates: HashSet<(i32, i32)> = HashSet::new();
-    let trial_markers: Vec<_> = block_entities.iter().filter(|m| m.kind == 3).collect();
-    for marker in block_entities.iter().filter(|m| m.kind != 3) {
-        candidates.insert((marker.x.div_euclid(16), marker.z.div_euclid(16)));
-    }
-    let mut results = Vec::new();
-    for (cx, cz) in candidates {
-        // Ignore candidate chunks near known generated-structure spawners,
-        // Trial Spawners, or Vaults. These are exclusion signals, not loot.
-        let near_trial_chamber = trial_markers.iter().any(|m| {
-            (m.x.div_euclid(16) - cx).abs() <= 3
-                && (m.z.div_euclid(16) - cz).abs() <= 3
-        });
-        if near_trial_chamber { continue; }
-        let in_neighborhood = |x: i32, z: i32| (x - cx).abs() <= 1 && (z - cz).abs() <= 1;
-        let nearby_entities: Vec<_> = block_entities.iter().filter(|m| m.kind != 3 && in_neighborhood(m.x.div_euclid(16), m.z.div_euclid(16))).collect();
-        let nearby_clusters: Vec<_> = clusters.iter().filter(|m| in_neighborhood(m.x.div_euclid(16), m.z.div_euclid(16))).collect();
-        let nearby_lights = lights.iter().filter(|m| m.is_source && in_neighborhood(m.x.div_euclid(16), m.z.div_euclid(16))).count();
-        let shulkers = nearby_entities.iter().filter(|m| m.kind == 1).count();
-        let storage = nearby_entities.iter().filter(|m| m.kind == 0).count();
-        let utilities = nearby_entities.len() - shulkers - storage;
 
-        // Cluster spread across multiple chunks is a stronger geode-region
-        // clue than a lone cluster, but it never creates suspicion by itself.
-        let cluster_chunks: HashSet<_> = nearby_clusters.iter().map(|m| (m.x.div_euclid(16), m.z.div_euclid(16))).collect();
-        let mut score = (shulkers * 40).min(80)
-            + (storage * 12).min(36)
-            + (utilities * 5).min(15);
-        if nearby_clusters.len() >= 4 { score += 8; }
-        if nearby_clusters.len() >= 8 { score += 8; }
-        if cluster_chunks.len() >= 2 && nearby_clusters.len() >= 4 { score += 10; }
-        if nearby_lights >= 3 { score += 5; }
-        if nearby_lights >= 6 { score += 5; }
-        // A lone chest, furnace, or other common generated container is weak
-        // evidence. Require a shulker, several storage blocks, or a
-        // combination of storage and utility blocks before flagging.
-        let has_base_like_storage = shulkers >= 2
-            || (shulkers >= 1 && storage >= 2)
-            || (storage >= 4 && utilities >= 2);
-        // Natural geodes/lights and isolated generated loot must not flag chunks.
-        if has_base_like_storage && score >= 45 {
-            // Restrict the ESP outline to the vertical span containing actual
-            // evidence, with a small margin so the player can see the nearby
-            // cavity without highlighting the entire world-height column.
-            let evidence_y = nearby_entities.iter().map(|m| m.y)
-                .chain(nearby_clusters.iter().map(|m| m.y))
-                .chain(lights.iter().filter(|m| in_neighborhood(m.x.div_euclid(16), m.z.div_euclid(16))).map(|m| m.y));
-            let (evidence_min, evidence_max) = evidence_y.fold((i32::MAX, i32::MIN), |(lo, hi), y| (lo.min(y), hi.max(y)));
-            let min_y = evidence_min.saturating_sub(8);
-            let max_y = evidence_max.saturating_add(9);
-            results.push(ChunkSuspicion {
-                chunk_x: cx, chunk_z: cz, score: score.min(100) as u8,
-                min_y, max_y,
-                block_entities: nearby_entities.len().min(u16::MAX as usize) as u16,
-                shulkers: shulkers.min(u16::MAX as usize) as u16,
-                clusters: nearby_clusters.len().min(u16::MAX as usize) as u16,
-                artificial_lights: nearby_lights.min(u16::MAX as usize) as u16,
+    let trial_markers: Vec<_> = block_entities.iter().filter(|m| m.kind == 3).collect();
+    let groups = grown_geode_groups(clusters);
+    let mut results = Vec::new();
+
+    for group in groups {
+        // One unfinished crystal anywhere in this geode invalidates the group.
+        let has_small_bud = group.iter().any(|grown| {
+            small_buds.iter().any(|bud| {
+                let dx = i64::from(grown.x) - i64::from(bud.x);
+                let dy = i64::from(grown.y) - i64::from(bud.y);
+                let dz = i64::from(grown.z) - i64::from(bud.z);
+                dx * dx + dy * dy + dz * dz <= 12 * 12
+            })
+        });
+        if has_small_bud {
+            continue;
+        }
+
+        let candidate_chunks: HashSet<_> = group
+            .iter()
+            .map(|m| (m.x.div_euclid(16), m.z.div_euclid(16)))
+            .collect();
+
+        for (cx, cz) in candidate_chunks {
+            // Known generated-structure spawners/vaults exclude nearby chunks.
+            let near_trial_chamber = trial_markers.iter().any(|m| {
+                (m.x.div_euclid(16) - cx).abs() <= 3
+                    && (m.z.div_euclid(16) - cz).abs() <= 3
             });
+            if near_trial_chamber {
+                continue;
+            }
+
+            let in_neighborhood = |x: i32, z: i32| {
+                (x - cx).abs() <= 1 && (z - cz).abs() <= 1
+            };
+            let nearby_clusters: Vec<_> = group
+                .iter()
+                .filter(|m| in_neighborhood(m.x.div_euclid(16), m.z.div_euclid(16)))
+                .collect();
+            // One or two mature clusters are not enough to identify a base.
+            if nearby_clusters.len() < 4 {
+                continue;
+            }
+
+            let nearby_entities: Vec<_> = block_entities
+                .iter()
+                .filter(|m| m.kind != 3 && in_neighborhood(m.x.div_euclid(16), m.z.div_euclid(16)))
+                .collect();
+            let nearby_lights: Vec<_> = lights
+                .iter()
+                .filter(|m| m.is_source && in_neighborhood(m.x.div_euclid(16), m.z.div_euclid(16)))
+                .collect();
+
+            let shulkers = nearby_entities.iter().filter(|m| m.kind == 1).count();
+            let storage = nearby_entities.iter().filter(|m| m.kind == 0).count();
+            let utilities = nearby_entities.len() - shulkers - storage;
+            let cluster_chunks: HashSet<_> = nearby_clusters
+                .iter()
+                .map(|m| (m.x.div_euclid(16), m.z.div_euclid(16)))
+                .collect();
+
+            // Mature geodes carry the largest share of the score. Other signs
+            // add confidence but cannot turn an isolated chest into a lead.
+            let mut score = (nearby_clusters.len() * 8).min(64)
+                + (shulkers * 40).min(80)
+                + (storage * 12).min(36)
+                + (utilities * 5).min(15);
+            if cluster_chunks.len() >= 2 && nearby_clusters.len() >= 4 {
+                score += 10;
+            }
+            if nearby_lights.len() >= 3 {
+                score += 5;
+            }
+            if nearby_lights.len() >= 6 {
+                score += 5;
+            }
+
+            let has_base_like_storage = shulkers >= 2
+                || (shulkers >= 1 && storage >= 2)
+                || (storage >= 4 && utilities >= 2);
+            // Strong artificial lighting can reinforce a large mature geode
+            // even when the area has few storage block entities.
+            let has_light_supported_geode = nearby_clusters.len() >= 8 && nearby_lights.len() >= 3;
+
+            if (has_base_like_storage || has_light_supported_geode) && score >= 45 {
+                let evidence_y = nearby_entities
+                    .iter()
+                    .map(|m| m.y)
+                    .chain(nearby_clusters.iter().map(|m| m.y))
+                    .chain(nearby_lights.iter().map(|m| m.y));
+                let (evidence_min, evidence_max) = evidence_y.fold(
+                    (i32::MAX, i32::MIN),
+                    |(lo, hi), y| (lo.min(y), hi.max(y)),
+                );
+                results.push(ChunkSuspicion {
+                    chunk_x: cx,
+                    chunk_z: cz,
+                    score: score.min(100) as u8,
+                    min_y: evidence_min.saturating_sub(8),
+                    max_y: evidence_max.saturating_add(9),
+                    block_entities: nearby_entities.len().min(u16::MAX as usize) as u16,
+                    shulkers: shulkers.min(u16::MAX as usize) as u16,
+                    clusters: nearby_clusters.len().min(u16::MAX as usize) as u16,
+                    artificial_lights: nearby_lights.len().min(u16::MAX as usize) as u16,
+                });
+            }
         }
     }
+
     results.sort_by(|a, b| b.score.cmp(&a.score));
+    results.dedup_by_key(|chunk| (chunk.chunk_x, chunk.chunk_z));
     results
 }
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -402,20 +506,20 @@ mod tests {
     #[test]
     fn common_generated_storage_alone_does_not_flag_a_chunk() {
         let chest = BlockEntityMarker { x: 8, y: 64, z: 8, kind: 0 };
-        assert!(score_suspicious_chunks(&[chest], &[], &[]).is_empty());
+        assert!(score_suspicious_chunks(&[chest], &[], &[], &[]).is_empty());
         let four_chests = [
             chest,
             BlockEntityMarker { x: 9, y: 64, z: 8, kind: 0 },
             BlockEntityMarker { x: 10, y: 64, z: 8, kind: 0 },
             BlockEntityMarker { x: 11, y: 64, z: 8, kind: 0 },
         ];
-        assert!(score_suspicious_chunks(&four_chests, &[], &[]).is_empty());
+        assert!(score_suspicious_chunks(&four_chests, &[], &[], &[]).is_empty());
     }
 
     #[test]
     fn one_shulker_without_other_base_evidence_does_not_flag() {
         let shulker = BlockEntityMarker { x: 8, y: 64, z: 8, kind: 1 };
-        assert!(score_suspicious_chunks(&[shulker], &[], &[]).is_empty());
+        assert!(score_suspicious_chunks(&[shulker], &[], &[], &[]).is_empty());
     }
 
     #[test]
@@ -428,9 +532,76 @@ mod tests {
             BlockEntityMarker { x: 12, y: 64, z: 8, kind: 2 },
             BlockEntityMarker { x: 13, y: 64, z: 8, kind: 2 },
         ];
-        let scored = score_suspicious_chunks(&entities, &[], &[]);
+        let clusters = [
+            AmethystMarker { x: 4, y: 20, z: 8 },
+            AmethystMarker { x: 5, y: 20, z: 8 },
+            AmethystMarker { x: 6, y: 20, z: 8 },
+            AmethystMarker { x: 7, y: 20, z: 8 },
+        ];
+        let scored = score_suspicious_chunks(&entities, &clusters, &[], &[]);
         assert_eq!(scored.len(), 1);
         assert!(scored[0].score >= 45);
+    }
+
+
+    #[test]
+    fn one_or_two_mature_clusters_never_flag_a_chunk() {
+        let entities = [
+            BlockEntityMarker { x: 8, y: 64, z: 8, kind: 1 },
+            BlockEntityMarker { x: 9, y: 64, z: 8, kind: 1 },
+        ];
+        let clusters = [
+            AmethystMarker { x: 8, y: 20, z: 8 },
+            AmethystMarker { x: 9, y: 20, z: 8 },
+        ];
+        assert!(score_suspicious_chunks(&entities, &clusters, &[], &[]).is_empty());
+    }
+
+    #[test]
+    fn any_unfinished_bud_rejects_its_geode_group() {
+        let entities = [
+            BlockEntityMarker { x: 8, y: 20, z: 8, kind: 1 },
+            BlockEntityMarker { x: 9, y: 20, z: 8, kind: 1 },
+        ];
+        let clusters = [
+            AmethystMarker { x: 8, y: 20, z: 8 },
+            AmethystMarker { x: 9, y: 20, z: 8 },
+            AmethystMarker { x: 10, y: 20, z: 8 },
+            AmethystMarker { x: 11, y: 20, z: 8 },
+            AmethystMarker { x: 12, y: 20, z: 8 },
+        ];
+        let small_buds = [AmethystMarker { x: 13, y: 20, z: 8 }];
+        assert!(score_suspicious_chunks(&entities, &clusters, &small_buds, &[]).is_empty());
+    }
+
+    #[test]
+    fn mature_geode_and_nearby_storage_can_flag_a_chunk() {
+        let entities = [
+            BlockEntityMarker { x: 8, y: 20, z: 8, kind: 1 },
+            BlockEntityMarker { x: 9, y: 20, z: 8, kind: 1 },
+        ];
+        let clusters = [
+            AmethystMarker { x: 8, y: 20, z: 8 },
+            AmethystMarker { x: 9, y: 20, z: 8 },
+            AmethystMarker { x: 10, y: 20, z: 8 },
+            AmethystMarker { x: 11, y: 20, z: 8 },
+            AmethystMarker { x: 12, y: 20, z: 8 },
+        ];
+        let scored = score_suspicious_chunks(&entities, &clusters, &[], &[]);
+        assert!(!scored.is_empty());
+        assert!(scored[0].clusters >= 4);
+    }
+
+    #[test]
+    fn a_large_mature_geode_with_artificial_lighting_can_flag_a_chunk() {
+        let clusters: Vec<_> = (0..8)
+            .map(|x| AmethystMarker { x, y: 20, z: 8 })
+            .collect();
+        let lights: Vec<_> = (0..3)
+            .map(|x| ArtificialLightMarker { x, y: 20, z: 10, is_source: true })
+            .collect();
+        let scored = score_suspicious_chunks(&[], &clusters, &[], &lights);
+        assert!(!scored.is_empty());
     }
 
     #[test]
