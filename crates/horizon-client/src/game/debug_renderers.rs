@@ -26,6 +26,10 @@ use horizon_world::{collision_context::CollisionContext, heightmap::HeightmapTyp
 const WATER_FILL: u32 = 0x2600_FF00;
 /// `SolidFaceRenderer`'s fill (-2130771968).
 const SOLID_FACE_FILL: u32 = 0x80FF_0000;
+/// Translucent violet fill for grown amethyst clusters found by the scanner.
+const AMETHYST_FILL: u32 = 0x70C060FF;
+/// Translucent cyan fill for selected artificial-light blocks.
+const ARTIFICIAL_LIGHT_FILL: u32 = 0x70FFB020;
 /// `TextGizmo.Style.DEFAULT_SCALE`.
 const TEXT_SCALE: f32 = 0.32;
 /// `HeightMapRenderer.BOX_HEIGHT`.
@@ -59,6 +63,7 @@ impl Game<'_> {
     /// `CollisionBoxRenderer`: the block collisions within 6 of the camera
     /// entity's box, white.
     pub(super) fn debug_renderer_gizmos(&self, g: &mut Gizmos) {
+        // Suspicious chunks are rendered as purple surface patches below.
         if !self.debug_entry("visualize_collision_boxes") {
             return;
         }
@@ -105,10 +110,14 @@ impl Game<'_> {
         let block_light = self.debug_entry("visualize_block_light_levels");
         let sky_light = self.debug_entry("visualize_sky_light_levels");
         let solid = self.debug_entry("visualize_solid_faces");
+        let amethyst_markers = self.extras.amethyst_markers.clone();
+        let artificial_light_markers = self.extras.artificial_light_markers.clone();
+        let suspicious_chunks = self.extras.suspicious_chunks.clone();
+        let block_entity_markers = self.extras.block_entity_markers.clone();
         let Some(p) = &self.player else {
             return;
         };
-        if !(water || heightmap || block_light || sky_light || solid) {
+        if !(water || heightmap || block_light || sky_light || solid || !amethyst_markers.is_empty() || !artificial_light_markers.is_empty() || !block_entity_markers.is_empty() || !suspicious_chunks.is_empty()) {
             return;
         }
         let feet = [p.position.x, p.position.y, p.position.z].map(|v| v.floor() as i32);
@@ -126,6 +135,96 @@ impl Game<'_> {
         }
         if solid {
             self.solid_face_shapes(eye, &mut fills);
+        }
+        // Paint every column of each suspicious chunk purple at the
+        // WorldSurface height, making one flat 16x16 surface marker.
+        for chunk in &suspicious_chunks {
+            let (base_x, base_z) = (chunk.chunk_x * 16, chunk.chunk_z * 16);
+            if !self.world.chunks.contains_key(&(chunk.chunk_x, chunk.chunk_z)) {
+                continue;
+            }
+            for x in base_x..base_x + 16 {
+                for z in base_z..base_z + 16 {
+                    let y = f64::from(self.column_height(HeightmapType::WorldSurface, x, z)) - 0.025;
+                    fills.extend(
+                        g::cuboid_fill_quads(
+                            [f64::from(x), y, f64::from(z)],
+                            [f64::from(x + 1), y + 0.035, f64::from(z + 1)],
+                        )
+                        .map(|q| (q, 0x90A020FF)),
+                    );
+                }
+            }
+        }
+        // Highlight detected grown clusters near the camera without requiring
+        // the debug-renderer options screen to be enabled.
+        for marker in amethyst_markers {
+            let dx = f64::from(marker.x) + 0.5 - camera.x;
+            let dy = f64::from(marker.y) + 0.5 - camera.y;
+            let dz = f64::from(marker.z) + 0.5 - camera.z;
+            if dx * dx + dy * dy + dz * dz > 48.0 * 48.0 {
+                continue;
+            }
+            let x = f64::from(marker.x);
+            let y = f64::from(marker.y);
+            let z = f64::from(marker.z);
+            fills.extend(
+                g::cuboid_fill_quads(
+                    [x + 0.08, y + 0.08, z + 0.08],
+                    [x + 0.92, y + 0.92, z + 0.92],
+                )
+                .map(|q| (q, AMETHYST_FILL)),
+            );
+        }
+        // Block-entity ESP: containers and utility block entities are
+        // highlighted through walls, with shulkers in a distinct color.
+        for marker in block_entity_markers {
+            // Trial Spawners and Vaults are structure-exclusion signals only.
+            // Do not render them as player storage/utility ESP.
+            if marker.kind == 3 {
+                continue;
+            }
+            let dx = f64::from(marker.x) + 0.5 - camera.x;
+            let dy = f64::from(marker.y) + 0.5 - camera.y;
+            let dz = f64::from(marker.z) + 0.5 - camera.z;
+            if dx * dx + dy * dy + dz * dz > 64.0 * 64.0 {
+                continue;
+            }
+            let x = f64::from(marker.x);
+            let y = f64::from(marker.y);
+            let z = f64::from(marker.z);
+            let color = match marker.kind {
+                1 => 0x80D060FF, // shulker
+                0 => 0x8060D0FF, // chest / barrel
+                _ => 0x80FFD060, // furnace, hopper and other utility
+            };
+            fills.extend(
+                g::cuboid_fill_quads(
+                    [x + 0.04, y + 0.04, z + 0.04],
+                    [x + 0.96, y + 0.96, z + 0.96],
+                )
+                .map(|q| (q, color)),
+            );
+        }
+        // Highlight selected artificial-light blocks with the same through-wall
+        // translucent geometry used for amethyst clusters.
+        for marker in artificial_light_markers {
+            let dx = f64::from(marker.x) + 0.5 - camera.x;
+            let dy = f64::from(marker.y) + 0.5 - camera.y;
+            let dz = f64::from(marker.z) + 0.5 - camera.z;
+            if dx * dx + dy * dy + dz * dz > 48.0 * 48.0 {
+                continue;
+            }
+            let x = f64::from(marker.x);
+            let y = f64::from(marker.y);
+            let z = f64::from(marker.z);
+            fills.extend(
+                g::cuboid_fill_quads(
+                    [x + 0.08, y + 0.08, z + 0.08],
+                    [x + 0.92, y + 0.92, z + 0.92],
+                )
+                .map(|q| (q, ARTIFICIAL_LIGHT_FILL)),
+            );
         }
         let start = out.len();
         self.mark_translucent_entity(start, "");
