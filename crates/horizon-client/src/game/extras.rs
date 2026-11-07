@@ -230,7 +230,11 @@ impl Game<'_> {
     }
     /// Scan nearby resident chunks for budding amethyst at a low cadence.
     fn update_amethyst_scanner(&mut self) {
-        if self.screen != Screen::Playing || self.title.is_some() || self.player.is_none() {
+        if !self.settings.extras.scanner_enabled
+            || self.screen != Screen::Playing
+            || self.title.is_some()
+            || self.player.is_none()
+        {
             self.extras.amethyst_markers.clear();
             self.extras.artificial_light_markers.clear();
             self.extras.block_entity_markers.clear();
@@ -283,6 +287,11 @@ impl Game<'_> {
                 &self.extras.amethyst_markers,
                 &small_amethyst_buds,
                 &self.extras.artificial_light_markers,
+                match self.settings.extras.scanner_sensitivity {
+                    0 => 55,
+                    2 => 35,
+                    _ => 45,
+                },
             );
         self.extras.amethyst_scanned_at = Some(now);
     }
