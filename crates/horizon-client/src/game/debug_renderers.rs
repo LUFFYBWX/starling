@@ -26,6 +26,8 @@ use horizon_world::{collision_context::CollisionContext, heightmap::HeightmapTyp
 const WATER_FILL: u32 = 0x2600_FF00;
 /// `SolidFaceRenderer`'s fill (-2130771968).
 const SOLID_FACE_FILL: u32 = 0x80FF_0000;
+/// Translucent violet fill for grown amethyst clusters found by the scanner.
+const AMETHYST_FILL: u32 = 0x70C060FF;
 /// `TextGizmo.Style.DEFAULT_SCALE`.
 const TEXT_SCALE: f32 = 0.32;
 /// `HeightMapRenderer.BOX_HEIGHT`.
@@ -105,10 +107,11 @@ impl Game<'_> {
         let block_light = self.debug_entry("visualize_block_light_levels");
         let sky_light = self.debug_entry("visualize_sky_light_levels");
         let solid = self.debug_entry("visualize_solid_faces");
+        let amethyst_markers = &self.extras.amethyst_markers;
         let Some(p) = &self.player else {
             return;
         };
-        if !(water || heightmap || block_light || sky_light || solid) {
+        if !(water || heightmap || block_light || sky_light || solid || !amethyst_markers.is_empty()) {
             return;
         }
         let feet = [p.position.x, p.position.y, p.position.z].map(|v| v.floor() as i32);
@@ -126,6 +129,26 @@ impl Game<'_> {
         }
         if solid {
             self.solid_face_shapes(eye, &mut fills);
+        }
+        // Highlight detected grown clusters near the camera without requiring
+        // the debug-renderer options screen to be enabled.
+        for marker in amethyst_markers {
+            let dx = f64::from(marker.x) + 0.5 - camera.x;
+            let dy = f64::from(marker.y) + 0.5 - camera.y;
+            let dz = f64::from(marker.z) + 0.5 - camera.z;
+            if dx * dx + dy * dy + dz * dz > 48.0 * 48.0 {
+                continue;
+            }
+            let x = f64::from(marker.x);
+            let y = f64::from(marker.y);
+            let z = f64::from(marker.z);
+            fills.extend(
+                g::cuboid_fill_quads(
+                    [x + 0.08, y + 0.08, z + 0.08],
+                    [x + 0.92, y + 0.92, z + 0.92],
+                )
+                .map(|q| (q, AMETHYST_FILL)),
+            );
         }
         let start = out.len();
         self.mark_translucent_entity(start, "");
