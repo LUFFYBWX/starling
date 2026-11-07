@@ -16,7 +16,7 @@ pub struct AmethystMarker {
 ///
 /// Uniform sections are handled without unpacking their palette. Non-uniform
 /// sections are unpacked once and scanned in the chunk's native index order.
-pub fn scan_chunk(chunk: &Chunk, target_state: u32) -> Vec<AmethystMarker> {
+pub fn scan_chunk(chunk: &Chunk, target_state: u32, air_state: u32) -> Vec<AmethystMarker> {
     let mut found = Vec::new();
     let base_x = chunk.x * 16;
     let base_z = chunk.z * 16;
@@ -38,7 +38,7 @@ pub fn scan_chunk(chunk: &Chunk, target_state: u32) -> Vec<AmethystMarker> {
             }
             continue;
         }
-        if section.is_uniform(0) {
+        if section.is_uniform(air_state) {
             continue;
         }
 
@@ -85,7 +85,7 @@ pub fn scan_loaded_chunks(
     let mut found = Vec::new();
     for (_, chunk) in &world.chunks {
         for target_state in &target_states {
-            found.extend(scan_chunk(chunk, *target_state));
+            found.extend(scan_chunk(chunk, *target_state, facts.air.0));
         }
     }
     found
@@ -103,7 +103,7 @@ mod tests {
         chunk.set(5, -31, 7, 99);
         chunk.set(15, 319, 0, 42);
 
-        let found = scan_chunk(&chunk, 42);
+        let found = scan_chunk(&chunk, 42, 0);
         assert_eq!(
             found,
             vec![
@@ -124,7 +124,7 @@ mod tests {
             }
         }
 
-        let found = scan_chunk(&chunk, 77);
+        let found = scan_chunk(&chunk, 77, 0);
         assert_eq!(found.len(), 4096);
         assert!(found.contains(&AmethystMarker { x: 16, y: -64, z: -16 }));
         assert!(found.contains(&AmethystMarker { x: 31, y: -49, z: -1 }));
@@ -132,6 +132,6 @@ mod tests {
 
     #[test]
     fn empty_chunk_has_no_markers() {
-        assert!(scan_chunk(&Chunk::empty(0, 0), 42).is_empty());
+        assert!(scan_chunk(&Chunk::empty(0, 0), 42, 0).is_empty());
     }
 }
