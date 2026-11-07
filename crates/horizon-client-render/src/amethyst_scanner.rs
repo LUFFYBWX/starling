@@ -148,6 +148,12 @@ pub fn scan_loaded_artificial_lights_near(
     // repeating a 15-block light search independently for every source.
     for source in sources {
         let pos = (source.x, source.y, source.z);
+        let in_generated_structure = world.chunks
+            .get(&(source.x.div_euclid(16), source.z.div_euclid(16)))
+            .is_some_and(|chunk| !chunk.structure_refs.is_empty() || !chunk.structure_starts.is_empty());
+        if in_generated_structure {
+            continue;
+        }
         source_markers.insert(pos);
         let level = facts.get(world.block(source.x, source.y, source.z)).emission.min(15);
         if level > best.get(&pos).copied().unwrap_or(0) {
