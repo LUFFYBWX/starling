@@ -63,6 +63,18 @@ impl Game<'_> {
     /// `CollisionBoxRenderer`: the block collisions within 6 of the camera
     /// entity's box, white.
     pub(super) fn debug_renderer_gizmos(&self, g: &mut Gizmos) {
+        // Draw full-height outlines for suspicious chunks directly in the
+        // world, always on top so walls do not hide the clue.
+        for &(chunk_x, chunk_z) in &self.extras.suspicious_chunks {
+            let Some(chunk) = self.world.chunks.get(&(chunk_x, chunk_z)) else {
+                continue;
+            };
+            let min_y = f64::from(chunk.min_y());
+            let max_y = min_y + chunk.sections.len() as f64 * 16.0;
+            let min = [f64::from(chunk_x * 16), min_y, f64::from(chunk_z * 16)];
+            let max = [min[0] + 16.0, max_y, min[2] + 16.0];
+            g.cuboid_on_top(min, max, 0xFFB040FF, 3.0);
+        }
         if !self.debug_entry("visualize_collision_boxes") {
             return;
         }
@@ -133,18 +145,6 @@ impl Game<'_> {
         }
         if solid {
             self.solid_face_shapes(eye, &mut fills);
-        }
-        // Draw full-height outlines for suspicious chunks directly in the
-        // world, always on top so walls do not hide the clue.
-        for (chunk_x, chunk_z) in suspicious_chunks {
-            let Some(chunk) = self.world.chunks.get(&(chunk_x, chunk_z)) else {
-                continue;
-            };
-            let min_y = f64::from(chunk.min_y());
-            let max_y = min_y + chunk.sections.len() as f64 * 16.0;
-            let min = [f64::from(chunk_x * 16), min_y, f64::from(chunk_z * 16)];
-            let max = [min[0] + 16.0, max_y, min[2] + 16.0];
-            g.cuboid_on_top(min, max, 0xFFB040FF, 3.0);
         }
         // Highlight detected grown clusters near the camera without requiring
         // the debug-renderer options screen to be enabled.
