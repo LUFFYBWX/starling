@@ -141,6 +141,54 @@ pub fn draw_lines_iter<'a>(
     }
 }
 
+/// Fixed GUI-pixel hitbox for the scanner's floating open/close button.
+pub fn scanner_button_rect(width: f32) -> [f32; 4] {
+    [width - 62.0, 54.0, 58.0, 18.0]
+}
+
+/// Fixed GUI-pixel panel rectangle. Rows are returned separately so touch
+/// handling and drawing share exactly the same layout.
+pub fn scanner_panel_rect(width: f32) -> [f32; 4] {
+    [width - 132.0, 76.0, 128.0, 104.0]
+}
+
+/// Draw the compact mobile scanner panel and its live ON/OFF states.
+pub fn draw_scanner_controls(
+    batch: &mut HudBatch,
+    atlas: &HudAtlas,
+    open: bool,
+    enabled: bool,
+    chunks: bool,
+    amethyst: bool,
+    block_entities: bool,
+    artificial_lights: bool,
+) {
+    let button = scanner_button_rect(batch.width);
+    batch.fill(atlas, button[0], button[1], button[2], button[3], rgba(18, 24, 36, 220));
+    batch.fill(atlas, button[0], button[1], button[2], 1.0, rgba(176, 96, 255, 255));
+    batch.text(atlas, "SCANNER", button[0] + 5.0, button[1] + 5.0, rgba(255, 255, 255, 255), true);
+    if !open {
+        return;
+    }
+    let panel = scanner_panel_rect(batch.width);
+    batch.fill(atlas, panel[0], panel[1], panel[2], panel[3], rgba(12, 16, 26, 238));
+    batch.fill(atlas, panel[0], panel[1], panel[2], 1.0, rgba(176, 96, 255, 255));
+    batch.text(atlas, "Amethyst scanner", panel[0] + 5.0, panel[1] + 5.0, rgba(220, 190, 255, 255), true);
+    let rows = [
+        ("Scanner", enabled),
+        ("Chunk outline", chunks),
+        ("Grown amethyst", amethyst),
+        ("Block entities", block_entities),
+        ("Artificial light", artificial_lights),
+    ];
+    for (i, (label, active)) in rows.into_iter().enumerate() {
+        let y = panel[1] + 20.0 + i as f32 * 16.0;
+        let color = if active { rgba(112, 235, 160, 255) } else { rgba(235, 120, 120, 255) };
+        batch.text(atlas, label, panel[0] + 5.0, y, rgba(235, 235, 245, 255), true);
+        batch.text(atlas, if active { "ON" } else { "OFF" }, panel[0] + panel[2] - 24.0, y, color, true);
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
