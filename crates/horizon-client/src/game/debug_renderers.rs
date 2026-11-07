@@ -67,11 +67,10 @@ impl Game<'_> {
         // world, always on top so walls do not hide the clue.
         for chunk_score in &self.extras.suspicious_chunks {
             let (chunk_x, chunk_z) = (chunk_score.chunk_x, chunk_score.chunk_z);
-            let Some(chunk) = self.world.chunks.get(&(chunk_x, chunk_z)) else {
-                continue;
-            };
-            let min_y = f64::from(chunk.min_y());
-            let max_y = min_y + chunk.sections.len() as f64 * 16.0;
+            // The scanner supplies a tight vertical interval around the
+            // evidence instead of outlining the chunk from bedrock to sky.
+            let min_y = f64::from(chunk_score.min_y);
+            let max_y = f64::from(chunk_score.max_y);
             let min = [f64::from(chunk_x * 16), min_y, f64::from(chunk_z * 16)];
             let max = [min[0] + 16.0, max_y, min[2] + 16.0];
             g.cuboid_on_top(min, max, 0xFFB040FF, 3.0);
