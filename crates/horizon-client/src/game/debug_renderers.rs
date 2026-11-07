@@ -170,6 +170,11 @@ impl Game<'_> {
         // Block-entity ESP: containers and utility block entities are
         // highlighted through walls, with shulkers in a distinct color.
         for marker in block_entity_markers {
+            // Trial Spawners and Vaults are structure-exclusion signals only.
+            // Do not render them as player storage/utility ESP.
+            if marker.kind == 3 {
+                continue;
+            }
             let dx = f64::from(marker.x) + 0.5 - camera.x;
             let dy = f64::from(marker.y) + 0.5 - camera.y;
             let dz = f64::from(marker.z) + 0.5 - camera.z;
