@@ -338,6 +338,7 @@ impl Game<'_> {
         if self.screen == Screen::Playing && self.title.is_none() && !self.ui.hide_gui {
             let count = format!("Clusters: {}", self.extras.amethyst_markers.len());
             let lights = format!("Artificial lights: {}", self.extras.artificial_light_markers.len());
+            let block_entities = format!("Block entities: {}", self.extras.block_entity_markers.len());
             let nearest = self.player.as_ref().and_then(|player| {
                 self.extras.amethyst_markers.iter().min_by(|a, b| {
                     let distance = |marker: &horizon_client::amethyst_scanner::AmethystMarker| {
@@ -352,23 +353,23 @@ impl Game<'_> {
             let position = nearest.map(|marker| {
                 format!("Nearest: {}, {}, {}", marker.x, marker.y, marker.z)
             });
-            if let Some(position) = position {
-                horizon_client::extras_hud::draw_lines(
-                    batch,
-                    &self.gui.atlas,
-                    &mut corners,
-                    Corner::TopRight,
-                    &[(count.as_str(), 0xDDAAFF), (lights.as_str(), 0xFFCC66), (position.as_str(), 0xFFFFFF)],
-                );
-            } else {
-                horizon_client::extras_hud::draw_lines(
-                    batch,
-                    &self.gui.atlas,
-                    &mut corners,
-                    Corner::TopRight,
-                    &[(count.as_str(), 0xDDAAFF), (lights.as_str(), 0xFFCC66)],
-                );
+            let suspicion = self.extras.suspicious_chunks.first().map(|chunk| {
+                format!("Top chunk: {}% ({}, {})", chunk.score, chunk.chunk_x, chunk.chunk_z)
+            });
+            let mut lines = vec![
+                (count.as_str(), 0xDDAAFF),
+                (lights.as_str(), 0xFFCC66),
+                (block_entities.as_str(), 0x66CCFF),
+            ];
+            if let Some(position) = position.as_deref() {
+                lines.push((position, 0xFFFFFF));
             }
+            if let Some(suspicion) = suspicion.as_deref() {
+                lines.push((suspicion, 0xFF80FF));
+            }
+            horizon_client::extras_hud::draw_lines(
+                batch, &self.gui.atlas, &mut corners, Corner::TopRight, &lines,
+            );
         }
         if mod_panels {
             self.draw_mod_panels(batch, &mut corners);
