@@ -139,6 +139,121 @@ pub fn scan_loaded_artificial_lights_near(
     .collect()
 }
 
+
+/// A loaded container or utility block entity highlighted by the ESP.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub struct BlockEntityMarker {
+    pub x: i32,
+    pub y: i32,
+    pub z: i32,
+    /// 0 = chest/barrel, 1 = shulker, 2 = other container or utility.
+    pub kind: u8,
+}
+
+/// Evidence score for one resident chunk. This is a heuristic, not a real
+/// statistical probability that a player base exists there.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct ChunkSuspicion {
+    pub chunk_x: i32,
+    pub chunk_z: i32,
+    pub score: u8,
+    pub block_entities: u16,
+    pub shulkers: u16,
+    pub clusters: u16,
+    pub artificial_lights: u16,
+}
+
+/// Finds block entities whose block state is a useful ESP target. The world
+/// map contains only block entities in currently loaded chunks.
+pub fn scan_loaded_block_entities_near(
+    world: &crate::world::World,
+    facts: &crate::blocks::BlockFacts,
+    center_chunk: (i32, i32),
+    radius_chunks: i32,
+) -> Vec<BlockEntityMarker> {
+    const TARGETS: &[&str] = &[
+        "minecraft:chest", "minecraft:trapped_chest", "minecraft:barrel",
+        "minecraft:ender_chest",
+        "minecraft:shulker_box", "minecraft:white_shulker_box",
+        "minecraft:orange_shulker_box", "minecraft:magenta_shulker_box",
+        "minecraft:light_blue_shulker_box", "minecraft:yellow_shulker_box",
+        "minecraft:lime_shulker_box", "minecraft:pink_shulker_box",
+        "minecraft:gray_shulker_box", "minecraft:light_gray_shulker_box",
+        "minecraft:cyan_shulker_box", "minecraft:purple_shulker_box",
+        "minecraft:blue_shulker_box", "minecraft:brown_shulker_box",
+        "minecraft:green_shulker_box", "minecraft:red_shulker_box",
+        "minecraft:black_shulker_box",
+        "minecraft:furnace", "minecraft:blast_furnace", "minecraft:smoker",
+        "minecraft:hopper", "minecraft:dispenser", "minecraft:dropper",
+        "minecraft:brewing_stand", "minecraft:crafter",
+    ];
+    let radius = radius_chunks.max(0);
+    world.block_entities.iter().filter_map(|(&(x, y, z), _)| {
+        let (cx, cz) = (x.div_euclid(16), z.div_euclid(16));
+        if (cx - center_chunk.0).pow(2) + (cz - center_chunk.1).pow(2) > radius.pow(2) {
+            return None;
+        }
+        let name = facts.get(world.block(x, y, z)).name.as_ref();
+        if !TARGETS.contains(&name) {
+            return None;
+        }
+        let kind = if name.ends_with("shulker_box") { 1 }
+            else if name.ends_with(":chest") || name.ends_with(":trapped_chest")
+                || name.ends_with(":barrel") || name.ends_with(":ender_chest") { 0 }
+            else { 2 };
+        Some(BlockEntityMarker { x, y, z, kind })
+    }).collect()
+}
+
+/// Scores loaded chunks using block entities as the primary evidence. Nearby
+/// amethyst clusters and artificial lights only strengthen an existing lead.
+pub fn score_suspicious_chunks(
+    block_entities: &[BlockEntityMarker],
+    clusters: &[AmethystMarker],
+    lights: &[ArtificialLightMarker],
+) -> Vec<ChunkSuspicion> {
+    use std::collections::{HashMap, HashSet};
+    let mut candidates: HashSet<(i32, i32)> = HashSet::new();
+    for marker in block_entities {
+        candidates.insert((marker.x.div_euclid(16), marker.z.div_euclid(16)));
+    }
+    let mut results = Vec::new();
+    for (cx, cz) in candidates {
+        let in_neighborhood = |x: i32, z: i32| (x - cx).abs() <= 1 && (z - cz).abs() <= 1;
+        let nearby_entities: Vec<_> = block_entities.iter().filter(|m| in_neighborhood(m.x.div_euclid(16), m.z.div_euclid(16))).collect();
+        let nearby_clusters: Vec<_> = clusters.iter().filter(|m| in_neighborhood(m.x.div_euclid(16), m.z.div_euclid(16))).collect();
+        let nearby_lights = lights.iter().filter(|m| in_neighborhood(m.x.div_euclid(16), m.z.div_euclid(16))).count();
+        let shulkers = nearby_entities.iter().filter(|m| m.kind == 1).count();
+        let storage = nearby_entities.iter().filter(|m| m.kind == 0).count();
+        let utilities = nearby_entities.len() - shulkers - storage;
+
+        // Cluster spread across multiple chunks is a stronger geode-region
+        // clue than a lone cluster, but it never creates suspicion by itself.
+        let cluster_chunks: HashSet<_> = nearby_clusters.iter().map(|m| (m.x.div_euclid(16), m.z.div_euclid(16))).collect();
+        let mut score = (shulkers * 35).min(70)
+            + (storage * 18).min(36)
+            + (utilities * 8).min(16);
+        if nearby_clusters.len() >= 4 { score += 8; }
+        if nearby_clusters.len() >= 8 { score += 8; }
+        if cluster_chunks.len() >= 2 && nearby_clusters.len() >= 4 { score += 10; }
+        if nearby_lights >= 3 { score += 5; }
+        if nearby_lights >= 6 { score += 5; }
+        // Requiring at least one detected block entity prevents natural
+        // geodes or lighting alone from flagging an entire region.
+        if score >= 35 {
+            results.push(ChunkSuspicion {
+                chunk_x: cx, chunk_z: cz, score: score.min(100) as u8,
+                block_entities: nearby_entities.len().min(u16::MAX as usize) as u16,
+                shulkers: shulkers.min(u16::MAX as usize) as u16,
+                clusters: nearby_clusters.len().min(u16::MAX as usize) as u16,
+                artificial_lights: nearby_lights.min(u16::MAX as usize) as u16,
+            });
+        }
+    }
+    results.sort_by(|a, b| b.score.cmp(&a.score));
+    results
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
