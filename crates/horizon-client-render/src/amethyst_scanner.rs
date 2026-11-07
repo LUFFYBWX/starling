@@ -163,6 +163,7 @@ pub fn scan_loaded_artificial_lights_near(
             let pos = (x + dx, y + dy, z + dz);
             let (cx, cz) = (pos.0.div_euclid(16), pos.2.div_euclid(16));
             if cx < min_chunk.0 || cx > max_chunk.0 || cz < min_chunk.1 || cz > max_chunk.1
+                || pos.1 < world.bottom_y() || pos.1 >= world.top_y()
                 || !world.loaded(pos.0, pos.2)
             {
                 continue;
