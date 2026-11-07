@@ -28,8 +28,10 @@ pub(super) struct ExtrasState {
     pub(super) amethyst_markers: Vec<horizon_client::amethyst_scanner::AmethystMarker>,
     /// Selected artificial-light blocks in loaded chunks.
     pub(super) artificial_light_markers: Vec<horizon_client::amethyst_scanner::ArtificialLightMarker>,
-    /// Chunks whose amethyst clues have nearby selected artificial lights.
-    pub(super) suspicious_chunks: std::collections::HashSet<(i32, i32)>,
+    /// Loaded storage and utility block entities, for the through-wall ESP.
+    pub(super) block_entity_markers: Vec<horizon_client::amethyst_scanner::BlockEntityMarker>,
+    /// Chunks ranked by nearby block entities, amethyst and artificial light.
+    pub(super) suspicious_chunks: Vec<horizon_client::amethyst_scanner::ChunkSuspicion>,
     amethyst_scanned_at: Option<Instant>,
     /// Auto-reconnect's attempts at the current server.
     reconnect: Tracker,
@@ -231,6 +233,7 @@ impl Game<'_> {
         if self.screen != Screen::Playing || self.title.is_some() || self.player.is_none() {
             self.extras.amethyst_markers.clear();
             self.extras.artificial_light_markers.clear();
+            self.extras.block_entity_markers.clear();
             self.extras.suspicious_chunks.clear();
             self.extras.amethyst_scanned_at = None;
             return;
@@ -263,21 +266,16 @@ impl Game<'_> {
                 center,
                 radius,
             );
-        // A chunk becomes a clue only when a grown cluster has at least
-        // two selected artificial-light blocks in its surrounding 3x3 chunks.
-        // This is a heuristic, not proof that a player built there.
-        let mut suspicious_chunks = std::collections::HashSet::new();
-        for cluster in &self.extras.amethyst_markers {
-            let (cx, cz) = (cluster.x.div_euclid(16), cluster.z.div_euclid(16));
-            let nearby_lights = self.extras.artificial_light_markers.iter().filter(|light| {
-                let (lx, lz) = (light.x.div_euclid(16), light.z.div_euclid(16));
-                (lx - cx).abs() <= 1 && (lz - cz).abs() <= 1
-            }).count();
-            if nearby_lights >= 2 {
-                suspicious_chunks.insert((cx, cz));
-            }
-        }
-        self.extras.suspicious_chunks = suspicious_chunks;
+        self.extras.block_entity_markers =
+            horizon_client::amethyst_scanner::scan_loaded_block_entities_near(
+                &self.world, self.res.facts(), center, radius,
+            );
+        self.extras.suspicious_chunks =
+            horizon_client::amethyst_scanner::score_suspicious_chunks(
+                &self.extras.block_entity_markers,
+                &self.extras.amethyst_markers,
+                &self.extras.artificial_light_markers,
+            );
         self.extras.amethyst_scanned_at = Some(now);
     }
     /// A mod's zoom in effect (`render.set-zoom`): (factor, smooth, turning
