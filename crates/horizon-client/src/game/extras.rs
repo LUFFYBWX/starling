@@ -32,6 +32,13 @@ pub(super) struct ExtrasState {
     pub(super) block_entity_markers: Vec<horizon_client::amethyst_scanner::BlockEntityMarker>,
     /// Chunks ranked by nearby block entities, amethyst and artificial light.
     pub(super) suspicious_chunks: Vec<horizon_client::amethyst_scanner::ChunkSuspicion>,
+    /// Unfinished amethyst buds retained between incremental scan stages.
+    small_amethyst_buds: Vec<horizon_client::amethyst_scanner::AmethystMarker>,
+    /// Scanner work is spread across frames to avoid one large update spike.
+    scanner_stage: u8,
+    scanner_stage_at: Option<Instant>,
+    scanner_center: (i32, i32),
+    scanner_radius: i32,
     /// Whether the in-game scanner control panel is open.
     pub(super) scanner_menu_open: bool,
     /// Finger currently interacting with the scanner panel, so it cannot move the player.
@@ -243,61 +250,86 @@ impl Game<'_> {
             self.extras.artificial_light_markers.clear();
             self.extras.block_entity_markers.clear();
             self.extras.suspicious_chunks.clear();
+            self.extras.small_amethyst_buds.clear();
+            self.extras.scanner_stage = 0;
+            self.extras.scanner_stage_at = None;
             self.extras.amethyst_scanned_at = None;
             return;
         }
         let now = Instant::now();
-        if self.extras.amethyst_scanned_at.is_some_and(|last| {
-            now.duration_since(last) < Duration::from_secs(3)
+        if self.extras.scanner_stage == 0 {
+            if self.extras.amethyst_scanned_at.is_some_and(|last| {
+                now.duration_since(last) < Duration::from_secs(3)
+            }) {
+                return;
+            }
+            let Some(player) = self.player.as_ref() else {
+                return;
+            };
+            self.extras.scanner_center = (
+                (player.position.x.floor() as i32).div_euclid(16),
+                (player.position.z.floor() as i32).div_euclid(16),
+            );
+            self.extras.scanner_radius = (self.settings.render_distance.max(2) as i32).min(6);
+            self.extras.amethyst_markers =
+                horizon_client::amethyst_scanner::scan_loaded_chunks_near(
+                    &self.world,
+                    self.res.facts(),
+                    self.extras.scanner_center,
+                    self.extras.scanner_radius,
+                );
+            self.extras.scanner_stage = 1;
+            self.extras.scanner_stage_at = Some(now);
+            return;
+        }
+        // Run one expensive scan stage at a time instead of doing all four
+        // synchronously in a single frame. The previous complete result stays
+        // visible until the next cycle has all of its evidence.
+        if self.extras.scanner_stage_at.is_some_and(|last| {
+            now.duration_since(last) < Duration::from_millis(500)
         }) {
             return;
         }
-        let Some(player) = self.player.as_ref() else {
-            return;
-        };
-        let center = (
-            (player.position.x.floor() as i32).div_euclid(16),
-            (player.position.z.floor() as i32).div_euclid(16),
-        );
-        let radius = (self.settings.render_distance.max(2) as i32).min(6);
-        self.extras.amethyst_markers =
-            horizon_client::amethyst_scanner::scan_loaded_chunks_near(
-                &self.world,
-                self.res.facts(),
-                center,
-                radius,
-            );
-        self.extras.artificial_light_markers =
-            horizon_client::amethyst_scanner::scan_loaded_artificial_lights_near(
-                &self.world,
-                self.res.facts(),
-                center,
-                radius,
-            );
-        let small_amethyst_buds =
-            horizon_client::amethyst_scanner::scan_loaded_small_buds_near(
-                &self.world,
-                self.res.facts(),
-                center,
-                radius,
-            );
-        self.extras.block_entity_markers =
-            horizon_client::amethyst_scanner::scan_loaded_block_entities_near(
-                &self.world, self.res.facts(), center, radius,
-            );
-        self.extras.suspicious_chunks =
-            horizon_client::amethyst_scanner::score_suspicious_chunks(
-                &self.extras.block_entity_markers,
-                &self.extras.amethyst_markers,
-                &small_amethyst_buds,
-                &self.extras.artificial_light_markers,
-                match self.settings.extras.scanner_sensitivity {
-                    0 => 55,
-                    2 => 35,
-                    _ => 45,
-                },
-            );
-        self.extras.amethyst_scanned_at = Some(now);
+        let center = self.extras.scanner_center;
+        let radius = self.extras.scanner_radius;
+        match self.extras.scanner_stage {
+            1 => {
+                self.extras.artificial_light_markers =
+                    horizon_client::amethyst_scanner::scan_loaded_artificial_lights_near(
+                        &self.world, self.res.facts(), center, radius,
+                    );
+            }
+            2 => {
+                self.extras.small_amethyst_buds =
+                    horizon_client::amethyst_scanner::scan_loaded_small_buds_near(
+                        &self.world, self.res.facts(), center, radius,
+                    );
+            }
+            _ => {
+                self.extras.block_entity_markers =
+                    horizon_client::amethyst_scanner::scan_loaded_block_entities_near(
+                        &self.world, self.res.facts(), center, radius,
+                    );
+                self.extras.suspicious_chunks =
+                    horizon_client::amethyst_scanner::score_suspicious_chunks(
+                        &self.extras.block_entity_markers,
+                        &self.extras.amethyst_markers,
+                        &self.extras.small_amethyst_buds,
+                        &self.extras.artificial_light_markers,
+                        match self.settings.extras.scanner_sensitivity {
+                            0 => 55,
+                            2 => 35,
+                            _ => 45,
+                        },
+                    );
+                self.extras.scanner_stage = 0;
+                self.extras.amethyst_scanned_at = Some(now);
+                self.extras.scanner_stage_at = None;
+                return;
+            }
+        }
+        self.extras.scanner_stage += 1;
+        self.extras.scanner_stage_at = Some(now);
     }
     /// A mod's zoom in effect (`render.set-zoom`): (factor, smooth, turning
     /// scale); none is 1.
