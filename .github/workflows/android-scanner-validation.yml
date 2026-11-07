@@ -4,7 +4,7 @@ on:
   pull_request:
     branches: [android]
   push:
-    branches: [feature/amethyst-scanner]
+    branches: [feature/amethyst-scanner, fix/scanner-natural-chests-and-esp]
   workflow_dispatch:
 
 permissions:
