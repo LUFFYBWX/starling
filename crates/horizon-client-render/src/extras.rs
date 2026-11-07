@@ -114,6 +114,14 @@ pub struct Extras {
     pub agent_control: bool,
     /// "Playing Horizon" on the player's Discord profile (`discord_presence`; on by default).
     pub discord_presence: bool,
+    /// Amethyst base scanner master switch and independent ESP layers.
+    pub scanner_enabled: bool,
+    pub scanner_chunks: bool,
+    pub scanner_amethyst: bool,
+    pub scanner_block_entities: bool,
+    pub scanner_artificial_lights: bool,
+    /// 0 = conservative, 1 = balanced, 2 = sensitive.
+    pub scanner_sensitivity: u8,
 }
 impl Default for Extras {
     fn default() -> Self {
@@ -147,6 +155,12 @@ impl Default for Extras {
             no_ai: false,
             agent_control: false,
             discord_presence: true,
+            scanner_enabled: true,
+            scanner_chunks: true,
+            scanner_amethyst: true,
+            scanner_block_entities: true,
+            scanner_artificial_lights: true,
+            scanner_sensitivity: 1,
         }
     }
 }
@@ -222,6 +236,16 @@ impl Extras {
                 horizon_core::no_ai::KEY => e.no_ai = flag(e.no_ai),
                 "agentControl" => e.agent_control = flag(e.agent_control),
                 "discordPresence" => e.discord_presence = flag(e.discord_presence),
+                "scannerEnabled" => e.scanner_enabled = flag(e.scanner_enabled),
+                "scannerChunks" => e.scanner_chunks = flag(e.scanner_chunks),
+                "scannerAmethyst" => e.scanner_amethyst = flag(e.scanner_amethyst),
+                "scannerBlockEntities" => e.scanner_block_entities = flag(e.scanner_block_entities),
+                "scannerArtificialLights" => e.scanner_artificial_lights = flag(e.scanner_artificial_lights),
+                "scannerSensitivity" => {
+                    if let Ok(v) = value.parse::<u8>() {
+                        e.scanner_sensitivity = v.min(2);
+                    }
+                }
                 _ => {}
             }
         }
@@ -229,7 +253,7 @@ impl Extras {
     }
     pub fn serialize(&self) -> String {
         format!(
-            "fullbright:{}\ndynamicLights:{}\nzoom:{}\nzoomKey:{}\nzoomLevel:{}\nzoomSmooth:{}\nzoomSensitivity:{}\nfps:{}\nfpsCorner:{}\nfpsLows:{}\nkeystrokes:{}\nkeystrokesCorner:{}\nkeystrokesCps:{}\nmovedToMods:{}\nminimap:{}\nminimapCorner:{}\nminimapSize:{}\nminimapShape:{}\nminimapZoom:{}\nminimapRotate:{}\nautoReconnect:{}\nownNameTag:{}\nmouseTweaks:{}\nmouseTweaksWheel:{}\nsort:{}\nsortKey:{}\n{}:{}\nagentControl:{}\ndiscordPresence:{}\n",
+            "fullbright:{}\ndynamicLights:{}\nzoom:{}\nzoomKey:{}\nzoomLevel:{}\nzoomSmooth:{}\nzoomSensitivity:{}\nfps:{}\nfpsCorner:{}\nfpsLows:{}\nkeystrokes:{}\nkeystrokesCorner:{}\nkeystrokesCps:{}\nmovedToMods:{}\nminimap:{}\nminimapCorner:{}\nminimapSize:{}\nminimapShape:{}\nminimapZoom:{}\nminimapRotate:{}\nautoReconnect:{}\nownNameTag:{}\nmouseTweaks:{}\nmouseTweaksWheel:{}\nsort:{}\nsortKey:{}\n{}:{}\nagentControl:{}\ndiscordPresence:{}\nscannerEnabled:{}\nscannerChunks:{}\nscannerAmethyst:{}\nscannerBlockEntities:{}\nscannerArtificialLights:{}\nscannerSensitivity:{}\n",
             bool_text(self.fullbright),
             bool_text(self.dynamic_lights),
             bool_text(self.zoom),
@@ -264,6 +288,12 @@ impl Extras {
             bool_text(self.no_ai),
             bool_text(self.agent_control),
             bool_text(self.discord_presence),
+            bool_text(self.scanner_enabled),
+            bool_text(self.scanner_chunks),
+            bool_text(self.scanner_amethyst),
+            bool_text(self.scanner_block_entities),
+            bool_text(self.scanner_artificial_lights),
+            self.scanner_sensitivity,
         )
     }
     /// Binds the extra key `name` (`SORT_KEY`); false for
@@ -394,6 +424,12 @@ pub enum Item {
     AgentControl,
     /// On the Horizon Settings page.
     DiscordPresence,
+    Scanner,
+    ScannerChunks,
+    ScannerAmethyst,
+    ScannerBlockEntities,
+    ScannerArtificialLights,
+    ScannerSensitivity,
 }
 /// The Extras page: headers and items.
 pub fn rows() -> Vec<Result<Item, &'static str>> {
@@ -411,6 +447,13 @@ pub fn rows() -> Vec<Result<Item, &'static str>> {
         Ok(SortKey),
         Err("Multiplayer"),
         Ok(AutoReconnect),
+        Err("Amethyst scanner"),
+        Ok(Scanner),
+        Ok(ScannerChunks),
+        Ok(ScannerAmethyst),
+        Ok(ScannerBlockEntities),
+        Ok(ScannerArtificialLights),
+        Ok(ScannerSensitivity),
     ]
 }
 impl Item {
@@ -427,6 +470,12 @@ impl Item {
             Item::NoAi => "No AI",
             Item::AgentControl => "Agent Control",
             Item::DiscordPresence => "Discord Rich Presence",
+            Item::Scanner => "Amethyst scanner",
+            Item::ScannerChunks => "Suspicious chunk highlights",
+            Item::ScannerAmethyst => "Grown amethyst ESP",
+            Item::ScannerBlockEntities => "Block entity ESP",
+            Item::ScannerArtificialLights => "Artificial light ESP",
+            Item::ScannerSensitivity => "Detection sensitivity",
         }
     }
     /// The switch this setting belongs to: it does nothing while that is off.
@@ -436,9 +485,11 @@ impl Item {
             MouseTweaksWheel => MouseTweaks,
             SortKey => Sort,
             Fullbright | DynamicLights | OwnNameTag | MouseTweaks | Sort | AutoReconnect | NoAi
-            | AgentControl | DiscordPresence => {
+            | AgentControl | DiscordPresence | Scanner => {
                 return None;
             }
+            ScannerChunks | ScannerAmethyst | ScannerBlockEntities
+            | ScannerArtificialLights | ScannerSensitivity => Scanner,
         })
     }
     /// What the row says under its caption.
@@ -475,6 +526,12 @@ impl Item {
             Item::AgentControl => {
                 "Your own AI agent can play this game through horizon-ctl or an MCP client, on this computer only."
             }
+            Item::Scanner => "Find player bases by prioritizing fully-grown amethyst geodes and nearby signs of player activity.",
+            Item::ScannerChunks => "Highlight only chunks that pass the base-suspicion filter.",
+            Item::ScannerAmethyst => "Show fully-grown amethyst clusters through blocks.",
+            Item::ScannerBlockEntities => "Show nearby chests, barrels, shulkers and utility block entities through blocks.",
+            Item::ScannerArtificialLights => "Show selected artificial light sources and their illuminated blocks.",
+            Item::ScannerSensitivity => "Conservative reduces false positives; Sensitive accepts weaker combinations of evidence.",
         }
     }
     /// The frame-time cost the main switch of an extra shows.
@@ -502,6 +559,12 @@ impl Item {
             Item::NoAi => e.no_ai,
             Item::AgentControl => e.agent_control,
             Item::DiscordPresence => e.discord_presence,
+            Item::Scanner => e.scanner_enabled,
+            Item::ScannerChunks => e.scanner_chunks,
+            Item::ScannerAmethyst => e.scanner_amethyst,
+            Item::ScannerBlockEntities => e.scanner_block_entities,
+            Item::ScannerArtificialLights => e.scanner_artificial_lights,
+            Item::ScannerSensitivity | Item::SortKey => return None,
             _ => return None,
         })
     }
@@ -509,6 +572,11 @@ impl Item {
     pub fn value(self, e: &Extras) -> String {
         match self {
             Item::SortKey => crate::keybinds::display_name(&e.sort_key).plain(),
+            Item::ScannerSensitivity => match e.scanner_sensitivity {
+                0 => "Conservative".into(),
+                2 => "Sensitive".into(),
+                _ => "Balanced".into(),
+            },
             other => match other.switch(e) {
                 Some(true) => "On".into(),
                 _ => "Off".into(),
@@ -529,6 +597,12 @@ impl Item {
             Item::NoAi => e.no_ai = !e.no_ai,
             Item::AgentControl => e.agent_control = !e.agent_control,
             Item::DiscordPresence => e.discord_presence = !e.discord_presence,
+            Item::Scanner => e.scanner_enabled = !e.scanner_enabled,
+            Item::ScannerChunks => e.scanner_chunks = !e.scanner_chunks,
+            Item::ScannerAmethyst => e.scanner_amethyst = !e.scanner_amethyst,
+            Item::ScannerBlockEntities => e.scanner_block_entities = !e.scanner_block_entities,
+            Item::ScannerArtificialLights => e.scanner_artificial_lights = !e.scanner_artificial_lights,
+            Item::ScannerSensitivity => e.scanner_sensitivity = (e.scanner_sensitivity + 1) % 3,
             Item::SortKey => {}
         }
     }
