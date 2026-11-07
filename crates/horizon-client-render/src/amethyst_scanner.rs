@@ -189,6 +189,10 @@ pub fn scan_loaded_block_entities_near(
         "minecraft:furnace", "minecraft:blast_furnace", "minecraft:smoker",
         "minecraft:hopper", "minecraft:dispenser", "minecraft:dropper",
         "minecraft:brewing_stand", "minecraft:crafter",
+        // Trial Chambers are structures, not player bases. Keep their signature
+        // block entities as exclusion markers so nearby loot/mechanisms do not
+        // inflate base suspicion.
+        "minecraft:trial_spawner", "minecraft:vault",
     ];
     let radius = radius_chunks.max(0);
     world.block_entities.iter().filter_map(|(&(x, y, z), _)| {
@@ -200,7 +204,8 @@ pub fn scan_loaded_block_entities_near(
         if !TARGETS.contains(&name) {
             return None;
         }
-        let kind = if name.ends_with("shulker_box") { 1 }
+        let kind = if name == "minecraft:trial_spawner" || name == "minecraft:vault" { 3 }
+            else if name.ends_with("shulker_box") { 1 }
             else if name.ends_with(":chest") || name.ends_with(":trapped_chest")
                 || name.ends_with(":barrel") || name.ends_with(":ender_chest") { 0 }
             else { 2 };
@@ -217,13 +222,22 @@ pub fn score_suspicious_chunks(
 ) -> Vec<ChunkSuspicion> {
     use std::collections::HashSet;
     let mut candidates: HashSet<(i32, i32)> = HashSet::new();
-    for marker in block_entities {
+    let trial_markers: Vec<_> = block_entities.iter().filter(|m| m.kind == 3).collect();
+    for marker in block_entities.iter().filter(|m| m.kind != 3) {
         candidates.insert((marker.x.div_euclid(16), marker.z.div_euclid(16)));
     }
     let mut results = Vec::new();
     for (cx, cz) in candidates {
+        // Ignore candidate chunks in the immediate vicinity of a known
+        // Trial Spawner or Vault. This prevents Trial Chamber loot and
+        // dispensers from being scored as player storage.
+        let near_trial_chamber = trial_markers.iter().any(|m| {
+            (m.x.div_euclid(16) - cx).abs() <= 3
+                && (m.z.div_euclid(16) - cz).abs() <= 3
+        });
+        if near_trial_chamber { continue; }
         let in_neighborhood = |x: i32, z: i32| (x - cx).abs() <= 1 && (z - cz).abs() <= 1;
-        let nearby_entities: Vec<_> = block_entities.iter().filter(|m| in_neighborhood(m.x.div_euclid(16), m.z.div_euclid(16))).collect();
+        let nearby_entities: Vec<_> = block_entities.iter().filter(|m| m.kind != 3 && in_neighborhood(m.x.div_euclid(16), m.z.div_euclid(16))).collect();
         let nearby_clusters: Vec<_> = clusters.iter().filter(|m| in_neighborhood(m.x.div_euclid(16), m.z.div_euclid(16))).collect();
         let nearby_lights = lights.iter().filter(|m| in_neighborhood(m.x.div_euclid(16), m.z.div_euclid(16))).count();
         let shulkers = nearby_entities.iter().filter(|m| m.kind == 1).count();
