@@ -1,0 +1,63 @@
+name: Build Android APK
+
+on:
+  push:
+    branches: [feature/amethyst-scanner]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-arm64:
+    name: Build arm64-v8a public APK
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install Android SDK components
+        run: |
+          sdkmanager "platforms;android-35" "build-tools;35.0.0" "ndk;27.2.12479018"
+          yes | sdkmanager --licenses
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.14"
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Set up Rust and Android target
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: "1.95.0"
+          targets: aarch64-linux-android
+
+      - name: Prepare pinned Minecraft engine tables
+        run: python tools/android_prepare.py
+
+      - name: Build public Android APK
+        run: |
+          python tools/android_build.py --abi arm64-v8a --public --java-home "$JAVA_HOME" --ndk-version 27.2.12479018 --build-tools-version 35.0.0
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: horizon-android-arm64-apk
+          path: .local/android/apk/arm64-v8a/horizon-android-public.apk
+          if-no-files-found: error
+          retention-days: 14
