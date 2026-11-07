@@ -139,46 +139,49 @@ pub fn scan_loaded_artificial_lights_near(
     );
     let mut illuminated = HashSet::new();
     let mut source_markers = HashSet::new();
+    let mut best: HashMap<(i32, i32, i32), u8> = HashMap::new();
+    let mut queue = VecDeque::new();
     let min_chunk = (center_chunk.0 - radius_chunks.max(0), center_chunk.1 - radius_chunks.max(0));
     let max_chunk = (center_chunk.0 + radius_chunks.max(0), center_chunk.1 + radius_chunks.max(0));
 
+    // Seed one shared flood fill with every selected torch/lantern. This avoids
+    // repeating a 15-block light search independently for every source.
     for source in sources {
-        source_markers.insert((source.x, source.y, source.z));
-        let source_state = world.block(source.x, source.y, source.z);
-        let initial = facts.get(source_state).emission.min(15);
-        if initial == 0 {
+        let pos = (source.x, source.y, source.z);
+        source_markers.insert(pos);
+        let level = facts.get(world.block(source.x, source.y, source.z)).emission.min(15);
+        if level > best.get(&pos).copied().unwrap_or(0) {
+            best.insert(pos, level);
+            queue.push_back((pos, level));
+        }
+    }
+    while let Some(((x, y, z), level)) = queue.pop_front() {
+        if best.get(&(x, y, z)).copied() != Some(level) || level <= 1 {
             continue;
         }
-        let mut best = HashMap::from([((source.x, source.y, source.z), initial)]);
-        let mut queue = VecDeque::from([((source.x, source.y, source.z), initial)]);
-        while let Some(((x, y, z), level)) = queue.pop_front() {
-            if level <= 1 {
+        for (dx, dy, dz) in DIRECTIONS {
+            let pos = (x + dx, y + dy, z + dz);
+            let (cx, cz) = (pos.0.div_euclid(16), pos.2.div_euclid(16));
+            if cx < min_chunk.0 || cx > max_chunk.0 || cz < min_chunk.1 || cz > max_chunk.1
+                || !world.loaded(pos.0, pos.2)
+            {
                 continue;
             }
-            for (dx, dy, dz) in DIRECTIONS {
-                let pos = (x + dx, y + dy, z + dz);
-                let (cx, cz) = (pos.0.div_euclid(16), pos.2.div_euclid(16));
-                if cx < min_chunk.0 || cx > max_chunk.0 || cz < min_chunk.1 || cz > max_chunk.1
-                    || !world.loaded(pos.0, pos.2)
-                {
-                    continue;
-                }
-                let state = world.block(pos.0, pos.1, pos.2);
-                let cell = facts.get(state);
-                // Another emitter is not evidence that this selected source
-                // illuminates the cell. Natural emitters are not traversed.
-                if cell.emission > 0 && !source_states.contains(&state.0) {
-                    continue;
-                }
-                let next = level.saturating_sub(cell.dampening.max(1));
-                if next == 0 || best.get(&pos).is_some_and(|old| *old >= next) {
-                    continue;
-                }
-                best.insert(pos, next);
-                queue.push_back((pos, next));
-                if !source_states.contains(&state.0) {
-                    illuminated.insert(pos);
-                }
+            let state = world.block(pos.0, pos.1, pos.2);
+            let cell = facts.get(state);
+            // Natural emitters (lava, glowstone, etc.) never seed or extend
+            // this scan. Selected torches/lanterns remain traversable.
+            if cell.emission > 0 && !source_states.contains(&state.0) {
+                continue;
+            }
+            let next = level.saturating_sub(cell.dampening.max(1));
+            if next == 0 || best.get(&pos).is_some_and(|old| *old >= next) {
+                continue;
+            }
+            best.insert(pos, next);
+            queue.push_back((pos, next));
+            if !source_states.contains(&state.0) {
+                illuminated.insert(pos);
             }
         }
     }
