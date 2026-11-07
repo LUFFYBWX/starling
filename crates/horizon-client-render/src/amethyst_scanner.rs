@@ -190,9 +190,9 @@ pub fn scan_loaded_artificial_lights_near(
     markers
 }
 
-/// Whether a container is backed by a generated loot table in its saved chunk data.
-/// Horizon preserves both unrolled loot tables and the rolled result for containers
-/// whose loot was opened, so generated structure chests do not become ESP evidence.
+/// Whether a container belongs to generated loot or a known generated structure.
+/// Horizon preserves unrolled loot tables and rolled results after opening. Chunk
+/// structure references also cover generated chests that have no saved loot tag.
 fn has_generated_loot_table(chunk: &Chunk, position: (i32, i32, i32)) -> bool {
     let Some(saved) = chunk.saved.as_ref() else {
         return false;
@@ -200,6 +200,8 @@ fn has_generated_loot_table(chunk: &Chunk, position: (i32, i32, i32)) -> bool {
     saved.block_entity_sources.iter().any(|(pos, tag)| {
         *pos == position && tag.get("LootTable").is_some()
     }) || saved.rolled_loot.iter().any(|loot| loot.pos == position)
+        || !chunk.structure_refs.is_empty()
+        || !chunk.structure_starts.is_empty()
 }
 
 /// Finds block entities whose block state is a useful ESP target. The world
@@ -242,7 +244,7 @@ pub fn scan_loaded_block_entities_near(
         }
         // Naturally generated chests often carry a structure loot table. Skip
         // both unopened tables and their tracked rolled form after first opening.
-        if (name == "minecraft:chest" || name == "minecraft:trapped_chest")
+        if (name == "minecraft:chest" || name == "minecraft:trapped_chest" || name == "minecraft:barrel")
             && world.chunks.get(&(cx, cz)).is_some_and(|chunk| {
                 has_generated_loot_table(chunk, (x, y, z))
             })
