@@ -63,18 +63,7 @@ impl Game<'_> {
     /// `CollisionBoxRenderer`: the block collisions within 6 of the camera
     /// entity's box, white.
     pub(super) fn debug_renderer_gizmos(&self, g: &mut Gizmos) {
-        // Draw full-height outlines for suspicious chunks directly in the
-        // world, always on top so walls do not hide the clue.
-        for chunk_score in &self.extras.suspicious_chunks {
-            let (chunk_x, chunk_z) = (chunk_score.chunk_x, chunk_score.chunk_z);
-            // The scanner supplies a tight vertical interval around the
-            // evidence instead of outlining the chunk from bedrock to sky.
-            let min_y = f64::from(chunk_score.min_y);
-            let max_y = f64::from(chunk_score.max_y);
-            let min = [f64::from(chunk_x * 16), min_y, f64::from(chunk_z * 16)];
-            let max = [min[0] + 16.0, max_y, min[2] + 16.0];
-            g.cuboid_on_top(min, max, 0xFFB040FF, 3.0);
-        }
+        // Suspicious chunks are rendered as purple surface patches below.
         if !self.debug_entry("visualize_collision_boxes") {
             return;
         }
@@ -128,7 +117,7 @@ impl Game<'_> {
         let Some(p) = &self.player else {
             return;
         };
-        if !(water || heightmap || block_light || sky_light || solid || !amethyst_markers.is_empty() || !artificial_light_markers.is_empty() || !block_entity_markers.is_empty()) {
+        if !(water || heightmap || block_light || sky_light || solid || !amethyst_markers.is_empty() || !artificial_light_markers.is_empty() || !block_entity_markers.is_empty() || !suspicious_chunks.is_empty()) {
             return;
         }
         let feet = [p.position.x, p.position.y, p.position.z].map(|v| v.floor() as i32);
@@ -146,6 +135,26 @@ impl Game<'_> {
         }
         if solid {
             self.solid_face_shapes(eye, &mut fills);
+        }
+        // Paint every column of each suspicious chunk purple at the
+        // WorldSurface height, making one flat 16x16 surface marker.
+        for chunk in &suspicious_chunks {
+            let (base_x, base_z) = (chunk.chunk_x * 16, chunk.chunk_z * 16);
+            if !self.world.chunks.contains_key(&(chunk.chunk_x, chunk.chunk_z)) {
+                continue;
+            }
+            for x in base_x..base_x + 16 {
+                for z in base_z..base_z + 16 {
+                    let y = f64::from(self.column_height(HeightmapType::WorldSurface, x, z)) - 0.025;
+                    fills.extend(
+                        g::cuboid_fill_quads(
+                            [f64::from(x), y, f64::from(z)],
+                            [f64::from(x + 1), y + 0.035, f64::from(z + 1)],
+                        )
+                        .map(|q| (q, 0x90A020FF)),
+                    );
+                }
+            }
         }
         // Highlight detected grown clusters near the camera without requiring
         // the debug-renderer options screen to be enabled.
