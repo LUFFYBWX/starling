@@ -257,9 +257,9 @@ pub fn score_suspicious_chunks(
         // A lone chest, furnace, or other common generated container is weak
         // evidence. Require a shulker, several storage blocks, or a
         // combination of storage and utility blocks before flagging.
-        let has_base_like_storage = shulkers >= 1
-            || storage >= 4
-            || (storage >= 2 && utilities >= 3);
+        let has_base_like_storage = shulkers >= 2
+            || (shulkers >= 1 && storage >= 2)
+            || (storage >= 4 && utilities >= 2);
         // Natural geodes/lights and isolated generated loot must not flag chunks.
         if has_base_like_storage && score >= 45 {
             // Restrict the ESP outline to the vertical span containing actual
@@ -289,6 +289,40 @@ pub fn score_suspicious_chunks(
 mod tests {
     use super::*;
     use crate::chunk::{Chunk, ColumnLayout};
+
+    #[test]
+    fn common_generated_storage_alone_does_not_flag_a_chunk() {
+        let chest = BlockEntityMarker { x: 8, y: 64, z: 8, kind: 0 };
+        assert!(score_suspicious_chunks(&[chest], &[], &[]).is_empty());
+        let four_chests = [
+            chest,
+            BlockEntityMarker { x: 9, y: 64, z: 8, kind: 0 },
+            BlockEntityMarker { x: 10, y: 64, z: 8, kind: 0 },
+            BlockEntityMarker { x: 11, y: 64, z: 8, kind: 0 },
+        ];
+        assert!(score_suspicious_chunks(&four_chests, &[], &[]).is_empty());
+    }
+
+    #[test]
+    fn one_shulker_without_other_base_evidence_does_not_flag() {
+        let shulker = BlockEntityMarker { x: 8, y: 64, z: 8, kind: 1 };
+        assert!(score_suspicious_chunks(&[shulker], &[], &[]).is_empty());
+    }
+
+    #[test]
+    fn mixed_storage_and_utilities_can_flag_a_chunk() {
+        let entities = [
+            BlockEntityMarker { x: 8, y: 64, z: 8, kind: 0 },
+            BlockEntityMarker { x: 9, y: 64, z: 8, kind: 0 },
+            BlockEntityMarker { x: 10, y: 64, z: 8, kind: 0 },
+            BlockEntityMarker { x: 11, y: 64, z: 8, kind: 0 },
+            BlockEntityMarker { x: 12, y: 64, z: 8, kind: 2 },
+            BlockEntityMarker { x: 13, y: 64, z: 8, kind: 2 },
+        ];
+        let scored = score_suspicious_chunks(&entities, &[], &[]);
+        assert_eq!(scored.len(), 1);
+        assert!(scored[0].score >= 45);
+    }
 
     #[test]
     fn finds_targets_at_absolute_coordinates_across_sections() {
