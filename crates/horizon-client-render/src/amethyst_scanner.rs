@@ -467,6 +467,62 @@ pub fn score_suspicious_chunks(
         }
     }
 
+    // Independent detection path: a dense concentration of useful block
+    // entities can indicate a player base even when no mature amethyst geode
+    // is nearby. Count the 3x3 chunk neighborhood around each occupied chunk.
+    // Generated Trial Chamber markers remain excluded.
+    const DENSE_ENTITY_MINIMUM: usize = 12;
+    let entity_candidate_chunks: HashSet<_> = block_entities
+        .iter()
+        .filter(|marker| marker.kind != 3)
+        .map(|marker| (marker.x.div_euclid(16), marker.z.div_euclid(16)))
+        .collect();
+
+    for (cx, cz) in entity_candidate_chunks {
+        let near_trial_chamber = trial_markers.iter().any(|m| {
+            (m.x.div_euclid(16) - cx).abs() <= 3
+                && (m.z.div_euclid(16) - cz).abs() <= 3
+        });
+        if near_trial_chamber {
+            continue;
+        }
+
+        let in_neighborhood = |x: i32, z: i32| {
+            (x - cx).abs() <= 1 && (z - cz).abs() <= 1
+        };
+        let nearby_entities: Vec<_> = block_entities
+            .iter()
+            .filter(|m| m.kind != 3 && in_neighborhood(m.x.div_euclid(16), m.z.div_euclid(16)))
+            .collect();
+        if nearby_entities.len() < DENSE_ENTITY_MINIMUM {
+            continue;
+        }
+
+        let shulkers = nearby_entities.iter().filter(|m| m.kind == 1).count();
+        let storage = nearby_entities.iter().filter(|m| m.kind == 0).count();
+        let utilities = nearby_entities.len() - shulkers - storage;
+        // Dense entity clusters are a standalone signal. The count-based score
+        // intentionally does not require geodes, lights, or a particular mix.
+        let score = (nearby_entities.len() * 5).min(100) as u8;
+        if score < minimum_score {
+            continue;
+        }
+
+        let evidence_min = nearby_entities.iter().map(|m| m.y).min().unwrap_or(0);
+        let evidence_max = nearby_entities.iter().map(|m| m.y).max().unwrap_or(0);
+        results.push(ChunkSuspicion {
+            chunk_x: cx,
+            chunk_z: cz,
+            score,
+            min_y: evidence_min.saturating_sub(8),
+            max_y: evidence_max.saturating_add(9),
+            block_entities: nearby_entities.len().min(u16::MAX as usize) as u16,
+            shulkers: shulkers.min(u16::MAX as usize) as u16,
+            clusters: 0,
+            artificial_lights: 0,
+        });
+    }
+
     results.sort_by(|a, b| b.score.cmp(&a.score));
     results.dedup_by_key(|chunk| (chunk.chunk_x, chunk.chunk_z));
     results
@@ -515,6 +571,23 @@ mod tests {
             BlockEntityMarker { x: 11, y: 64, z: 8, kind: 0 },
         ];
         assert!(score_suspicious_chunks(&four_chests, &[], &[], &[], 45).is_empty());
+    }
+
+    #[test]
+    fn dense_block_entities_flag_without_any_amethyst_geode() {
+        let entities: Vec<_> = (0..12)
+            .map(|i| BlockEntityMarker {
+                x: 2 + i,
+                y: 64,
+                z: 8,
+                kind: if i % 3 == 0 { 0 } else { 2 },
+            })
+            .collect();
+        let scored = score_suspicious_chunks(&entities, &[], &[], &[], 55);
+        assert!(!scored.is_empty());
+        assert_eq!(scored[0].clusters, 0);
+        assert_eq!(scored[0].block_entities, 12);
+        assert!(scored[0].score >= 55);
     }
 
     #[test]
