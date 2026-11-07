@@ -23,6 +23,32 @@ pub struct ArtificialLightMarker {
     pub is_source: bool,
 }
 
+/// A loaded container or utility block entity highlighted by the ESP.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub struct BlockEntityMarker {
+    pub x: i32,
+    pub y: i32,
+    pub z: i32,
+    /// 0 = chest/barrel, 1 = shulker, 2 = other container or utility, 3 = generated structure exclusion.
+    pub kind: u8,
+}
+
+/// Evidence score for one resident chunk. This is a heuristic, not a real
+/// statistical probability that a player base exists there.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct ChunkSuspicion {
+    pub chunk_x: i32,
+    pub chunk_z: i32,
+    pub score: u8,
+    /// Vertical bounds of the evidence that made this chunk suspicious.
+    pub min_y: i32,
+    pub max_y: i32,
+    pub block_entities: u16,
+    pub shulkers: u16,
+    pub clusters: u16,
+    pub artificial_lights: u16,
+}
+
 /// Scan one already-loaded chunk for any of the supplied block-state IDs.
 fn scan_chunk_states(
     chunk: &Chunk,
