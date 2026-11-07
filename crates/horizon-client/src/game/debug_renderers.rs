@@ -219,12 +219,17 @@ impl Game<'_> {
             let x = f64::from(marker.x);
             let y = f64::from(marker.y);
             let z = f64::from(marker.z);
+            let (inset, color) = if marker.is_source {
+                (0.08, ARTIFICIAL_LIGHT_FILL)
+            } else {
+                (0.18, 0x48FFB020)
+            };
             fills.extend(
                 g::cuboid_fill_quads(
-                    [x + 0.08, y + 0.08, z + 0.08],
-                    [x + 0.92, y + 0.92, z + 0.92],
+                    [x + inset, y + inset, z + inset],
+                    [x + 1.0 - inset, y + 1.0 - inset, z + 1.0 - inset],
                 )
-                .map(|q| (q, ARTIFICIAL_LIGHT_FILL)),
+                .map(|q| (q, color)),
             );
         }
         let light = vertex_light(0xFF);
