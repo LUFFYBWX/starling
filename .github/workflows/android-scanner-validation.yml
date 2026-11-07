@@ -29,6 +29,12 @@ jobs:
         with:
           python-version: "3.11"
 
+      - name: Compile scanner crates
+        run: cargo check -p horizon-client-render -p horizon-client --no-default-features
+
+      - name: Run amethyst scanner tests
+        run: cargo test -p horizon-client-render amethyst_scanner --no-default-features
+
       - name: Run Android release audit tests
         run: python -m unittest discover -s tests -p 'test_android*.py'
 
