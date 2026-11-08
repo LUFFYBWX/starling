@@ -727,7 +727,7 @@ impl Game<'_> {
             if enabled {
                 self.tutorial
                     .mouse(f64::from(delta[0]), f64::from(delta[1]));
-                self.turn_player(f64::from(delta[0] / 0.15), f64::from(delta[1] / 0.15));
+                self.turn_freecam(f64::from(delta[0] / 0.15), f64::from(delta[1] / 0.15));
             }
         }
         let settings = &self.settings.controller;
