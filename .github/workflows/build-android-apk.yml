@@ -2,7 +2,7 @@ name: Build Android APK
 
 on:
   push:
-    branches: [feature/amethyst-scanner]
+    branches: [feature/amethyst-scanner, feature/hc-menu-freecam]
   workflow_dispatch:
 
 permissions:
