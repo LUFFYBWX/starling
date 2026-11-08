@@ -4,7 +4,7 @@ name: Build Android APK
 
 on:
   push:
-    branches: [feature/amethyst-scanner, fix/scanner-natural-chests-and-esp]
+    branches: [feature/amethyst-scanner, fix/scanner-natural-chests-and-esp, test/freecam-experiment]
   workflow_dispatch:
 
 permissions:
