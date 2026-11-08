@@ -148,15 +148,20 @@ impl Game<'_> {
         let mut fills: Vec<([[f64; 3]; 4], u32)> = Vec::new();
         let mut esp_fills: Vec<([[f64; 3]; 4], u32)> = Vec::new();
         let mut texts: Vec<([f64; 3], String, u32)> = Vec::new();
-        // One thin strip per side: all chunk borders share the player's
-        // current horizontal Y plane, instead of following each terrain edge.
-        let chunk_border_y = f64::from(feet[1]) + 0.035;
+        // Each chunk border follows that chunk's highest surface block.
+        // Sample all 256 columns and keep one shared Y for its four sides.
         for chunk in &suspicious_chunks {
             if !self.world.chunks.contains_key(&(chunk.chunk_x, chunk.chunk_z)) {
                 continue;
             }
             let bx = chunk.chunk_x * 16;
             let bz = chunk.chunk_z * 16;
+            let chunk_top_y = (bx..bx + 16)
+                .flat_map(|x| (bz..bz + 16).map(move |z| (x, z)))
+                .map(|(x, z)| self.column_height(HeightmapType::WorldSurface, x, z))
+                .max()
+                .unwrap_or(feet[1]);
+            let chunk_border_y = f64::from(chunk_top_y) + 0.035;
             let x = f64::from(bx);
             let z = f64::from(bz);
             let (y_north, y_south, y_west, y_east) = (
