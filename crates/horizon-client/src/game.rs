@@ -2876,6 +2876,8 @@ struct Game<'a> {
     /// The Server Links screens' state (game/server_links.rs).
     links_ui: server_links::LinksUi,
     camera_type: perspective::CameraType,
+    /// Experimental detached camera; isolated to the Freecam test branch.
+    freecam: Option<perspective::Freecam>,
     fangs: fangs::FangState,
     /// The local player as a model (third person, the inventory).
     player_model: Option<Mob>,
@@ -3024,6 +3026,9 @@ impl Game<'_> {
     /// crosshair target (blocks, fluids, entities, mod raycasts) is found
     /// along this ray, so a tracked controller can stand in for it.
     fn aim(&self) -> Option<([f64; 3], [f64; 3])> {
+        if let Some(camera) = self.freecam {
+            return Some((camera.position.to_array(), view_vector(camera.yaw, camera.pitch)));
+        }
         // Minecraft.pick: from the camera entity's eyes along its view
         // (LivingEntity.getViewYRot: the head's yaw).
         if let Some(m) = self.camera_mob() {
@@ -6922,7 +6927,17 @@ impl Game<'_> {
         self.tick_server_mods();
         let camera_eye = self.camera_eye_height();
         let stick = self.pad_move();
-        if self.riding.is_some() && self.player.is_some() {
+        if self.freecam.is_some() && self.screen == Screen::Playing {
+            let held = |key| self.keys.contains(&key);
+            self.move_freecam(
+                0.05,
+                held(KeyCode::KeyW), held(KeyCode::KeyS),
+                held(KeyCode::KeyA), held(KeyCode::KeyD),
+                held(KeyCode::Space), held(KeyCode::ShiftLeft),
+                held(KeyCode::ControlLeft), stick,
+            );
+        }
+        if self.riding.is_some() && self.player.is_some() && self.freecam.is_none() {
             let playing = self.screen == Screen::Playing && !self.dialog_open();
             let held = |k| playing && self.keys.contains(&k);
             let keys = Keys {
@@ -6988,7 +7003,7 @@ impl Game<'_> {
             [player.velocity.x, player.velocity.y, player.velocity.z],
             [player.position.x, player.position.y, player.position.z],
         );
-        if !riding {
+        if !riding && self.freecam.is_none() {
             MotionWorld {
                 entities: &entity_collisions,
                 player,
@@ -7592,7 +7607,7 @@ impl Game<'_> {
         {
             self.tutorial.mouse(xo, yo);
             let zoom = self.zoom_turn_scale();
-            self.turn_player(xo * zoom, yo * zoom);
+            self.turn_freecam(xo * zoom, yo * zoom);
         }
     }
     /// Publish pause before a lifecycle transition can prevent another frame.
@@ -10413,6 +10428,9 @@ impl Game<'_> {
     /// `Camera.setRotation`: the camera's orientation, turned round in
     /// third-person front view.
     pub(super) fn camera_orientation(&self) -> glam::Quat {
+        if let Some(camera) = self.freecam {
+            return camera_rotation(self.camera_type, camera.yaw, camera.pitch);
+        }
         camera_rotation(self.camera_type, self.yaw, self.pitch)
     }
     /// ItemEntityRenderer: items bob and spin; blocks render as small cubes.
@@ -15733,6 +15751,7 @@ impl Game<'_> {
             // key.toggleGui is a KeyMapping: it clicks only with no screen open.
             KeyCode::F1 if self.screen == Screen::Playing => self.toggle_hide_gui(),
             KeyCode::F11 => self.toggle_fullscreen(),
+            KeyCode::F6 if self.screen == Screen::Playing => self.toggle_freecam(),
             KeyCode::F5 if self.screen == Screen::Playing => self.cycle_camera(),
             KeyCode::KeyE
                 if self.screen == Screen::Creative && self.creative_screen.tab().search => {}
@@ -16844,7 +16863,7 @@ impl Game<'_> {
                 if delta[0] != 0.0 || delta[1] != 0.0 {
                     self.tutorial
                         .mouse(f64::from(delta[0]), f64::from(delta[1]));
-                    self.turn_player(f64::from(delta[0]) / 0.15, f64::from(delta[1]) / 0.15);
+                    self.turn_freecam(f64::from(delta[0]) / 0.15, f64::from(delta[1]) / 0.15);
                 }
                 if self.pad.touch.chat_requested {
                     self.audio.play_button_click();
@@ -18941,6 +18960,7 @@ impl<'a> Game<'a> {
             adv_ui: Default::default(),
             links_ui: Default::default(),
             camera_type: Default::default(),
+            freecam: None,
             fangs: Default::default(),
             player_model: None,
         })
