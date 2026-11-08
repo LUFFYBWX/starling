@@ -1,5 +1,7 @@
 name: Build Android APK
 
+# Trigger a fresh build for the latest ESP fixes.
+
 on:
   push:
     branches: [feature/amethyst-scanner, fix/scanner-natural-chests-and-esp]
