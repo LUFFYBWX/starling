@@ -148,8 +148,9 @@ impl Game<'_> {
         let mut fills: Vec<([[f64; 3]; 4], u32)> = Vec::new();
         let mut esp_fills: Vec<([[f64; 3]; 4], u32)> = Vec::new();
         let mut texts: Vec<([f64; 3], String, u32)> = Vec::new();
-        // One thin strip per side: a clean 16x16 outline at the surface,
-        // with no filled blocks inside the chunk.
+        // One thin strip per side: all chunk borders share the player's
+        // current horizontal Y plane, instead of following each terrain edge.
+        let chunk_border_y = f64::from(feet[1]) + 0.035;
         for chunk in &suspicious_chunks {
             if !self.world.chunks.contains_key(&(chunk.chunk_x, chunk.chunk_z)) {
                 continue;
@@ -158,12 +159,9 @@ impl Game<'_> {
             let bz = chunk.chunk_z * 16;
             let x = f64::from(bx);
             let z = f64::from(bz);
-            // Keep all four chunk edges on one horizontal plane. Sampling
-            // each edge independently made borders follow terrain height changes.
-            let border_y = f64::from(self.column_height(
-                HeightmapType::WorldSurface, bx + 8, bz + 8,
-            )) + 0.035;
-            let (y_north, y_south, y_west, y_east) = (border_y, border_y, border_y, border_y);
+            let (y_north, y_south, y_west, y_east) = (
+                chunk_border_y, chunk_border_y, chunk_border_y, chunk_border_y,
+            );
             let color = 0xF0B040FF;
             // The displayed percentage is the scanner's existing 0..100
             // evidence score, computed from the same filter criteria.
