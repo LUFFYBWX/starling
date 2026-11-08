@@ -95,7 +95,7 @@ impl Game<'_> {
     }
     /// `LocalPlayer.isControlledCamera`: the view is the player's own.
     pub(super) fn controls_camera(&self) -> bool {
-        self.remote_camera_id().is_none()
+        self.freecam.is_none() && self.remote_camera_id().is_none()
     }
     /// The mob the view follows, while the level still holds it.
     pub(super) fn camera_mob(&self) -> Option<&Mob> {
