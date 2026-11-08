@@ -126,6 +126,17 @@ fn scan_loaded_states_near(
     found
 }
 
+/// Scan loaded chunks for honey blocks, used by the red Honey Block ESP.
+pub fn scan_loaded_honey_blocks_near(
+    world: &crate::world::World,
+    facts: &crate::blocks::BlockFacts,
+    center_chunk: (i32, i32),
+    radius_chunks: i32,
+) -> Vec<AmethystMarker> {
+    let states = state_ids_named(facts, &["minecraft:honey_block"]);
+    scan_loaded_states_near(world, &states, facts.air.0, center_chunk, radius_chunks)
+}
+
 /// Scan loaded chunks for fully-grown amethyst clusters (not budding blocks).
 pub fn scan_loaded_chunks_near(
     world: &crate::world::World,

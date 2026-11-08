@@ -121,6 +121,11 @@ impl Game<'_> {
             } else {
                 Vec::new()
             };
+        let honey_block_markers = if scanner.scanner_enabled {
+            self.extras.honey_block_markers.clone()
+        } else {
+            Vec::new()
+        };
         let suspicious_chunks = if scanner.scanner_enabled && scanner.scanner_chunks {
             self.extras.suspicious_chunks.clone()
         } else {
@@ -135,7 +140,7 @@ impl Game<'_> {
         let Some(p) = &self.player else {
             return;
         };
-        if !(water || heightmap || block_light || sky_light || solid || !amethyst_markers.is_empty() || !artificial_light_markers.is_empty() || !block_entity_markers.is_empty() || !suspicious_chunks.is_empty()) {
+        if !(water || heightmap || block_light || sky_light || solid || !amethyst_markers.is_empty() || !artificial_light_markers.is_empty() || !block_entity_markers.is_empty() || !honey_block_markers.is_empty() || !suspicious_chunks.is_empty()) {
             return;
         }
         let feet = [p.position.x, p.position.y, p.position.z].map(|v| v.floor() as i32);
@@ -153,11 +158,12 @@ impl Game<'_> {
             let bz = chunk.chunk_z * 16;
             let x = f64::from(bx);
             let z = f64::from(bz);
-            let center_surface = self.column_height(HeightmapType::WorldSurface, bx + 8, bz + 8);
-            let y_north = f64::from(self.column_height(HeightmapType::WorldSurface, bx + 8, bz)) + 0.035;
-            let y_south = f64::from(self.column_height(HeightmapType::WorldSurface, bx + 8, bz + 15)) + 0.035;
-            let y_west = f64::from(self.column_height(HeightmapType::WorldSurface, bx, bz + 8)) + 0.035;
-            let y_east = f64::from(self.column_height(HeightmapType::WorldSurface, bx + 15, bz + 8)) + 0.035;
+            // Keep all four chunk edges on one horizontal plane. Sampling
+            // each edge independently made borders follow terrain height changes.
+            let border_y = f64::from(self.column_height(
+                HeightmapType::WorldSurface, bx + 8, bz + 8,
+            )) + 0.035;
+            let (y_north, y_south, y_west, y_east) = (border_y, border_y, border_y, border_y);
             let color = 0xF0B040FF;
             // The displayed percentage is the scanner's existing 0..100
             // evidence score, computed from the same filter criteria.
@@ -191,6 +197,25 @@ impl Game<'_> {
         }
         if solid {
             self.solid_face_shapes(eye, &mut fills);
+        }
+        // Honey Block ESP: red translucent boxes, visible through terrain.
+        for marker in honey_block_markers {
+            let dx = f64::from(marker.x) + 0.5 - camera.x;
+            let dy = f64::from(marker.y) + 0.5 - camera.y;
+            let dz = f64::from(marker.z) + 0.5 - camera.z;
+            if dx * dx + dy * dy + dz * dz > 64.0 * 64.0 {
+                continue;
+            }
+            let x = f64::from(marker.x);
+            let y = f64::from(marker.y);
+            let z = f64::from(marker.z);
+            esp_fills.extend(
+                g::cuboid_fill_quads(
+                    [x + 0.04, y + 0.04, z + 0.04],
+                    [x + 0.96, y + 0.96, z + 0.96],
+                )
+                .map(|q| (q, 0xA0FF2020)),
+            );
         }
         // Highlight detected grown clusters near the camera without requiring
         // the debug-renderer options screen to be enabled.

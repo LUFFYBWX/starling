@@ -26,6 +26,8 @@ pub(super) struct ExtrasState {
     minimap_dim: Option<Dim>,
     /// Loaded-world fully-grown amethyst cluster locations, refreshed periodically.
     pub(super) amethyst_markers: Vec<horizon_client::amethyst_scanner::AmethystMarker>,
+    /// Honey blocks highlighted by the dedicated red ESP.
+    pub(super) honey_block_markers: Vec<horizon_client::amethyst_scanner::AmethystMarker>,
     /// Artificial-light sources and the blocks their light reaches in loaded chunks.
     pub(super) artificial_light_markers: Vec<horizon_client::amethyst_scanner::ArtificialLightMarker>,
     /// Loaded storage and utility block entities, for the through-wall ESP.
@@ -247,6 +249,7 @@ impl Game<'_> {
             || self.player.is_none()
         {
             self.extras.amethyst_markers.clear();
+            self.extras.honey_block_markers.clear();
             self.extras.artificial_light_markers.clear();
             self.extras.block_entity_markers.clear();
             self.extras.suspicious_chunks.clear();
@@ -282,7 +285,7 @@ impl Game<'_> {
             self.extras.scanner_stage_at = Some(now);
             return;
         }
-        // Run one expensive scan stage at a time instead of doing all four
+        // Run one expensive scan stage at a time instead of doing all five
         // synchronously in a single frame. The previous complete result stays
         // visible until the next cycle has all of its evidence.
         if self.extras.scanner_stage_at.is_some_and(|last| {
@@ -302,6 +305,12 @@ impl Game<'_> {
             2 => {
                 self.extras.small_amethyst_buds =
                     horizon_client::amethyst_scanner::scan_loaded_small_buds_near(
+                        &self.world, self.res.facts(), center, radius,
+                    );
+            }
+            3 => {
+                self.extras.honey_block_markers =
+                    horizon_client::amethyst_scanner::scan_loaded_honey_blocks_near(
                         &self.world, self.res.facts(), center, radius,
                     );
             }
