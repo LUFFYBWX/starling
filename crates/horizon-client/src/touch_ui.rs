@@ -1645,32 +1645,18 @@ impl TouchUi {
             p[0] >= r[0] && p[0] <= r[0] + r[2] && p[1] >= r[1] && p[1] <= r[1] + r[3]
         };
 
-        let gui_unit = ui.batch.scale / ui.density;
-        let (btn_x, btn_y, btn_w, btn_h) = if self.goy_mode {
-            let (bw, bh) = (48.0, 42.0);
-            (
-                (settings.floating_menu_pos[0] * w).clamp(6.0, (w - bw - 6.0).max(6.0)),
-                (settings.floating_menu_pos[1] * h).clamp(4.0, (h - bh - 4.0).max(4.0)),
-                bw,
-                bh,
-            )
-        } else {
-            (
-                3.0 * gui_unit,
-                3.0 * gui_unit,
-                33.0 * gui_unit,
-                20.0 * gui_unit,
-            )
-        };
+        // One consistent, draggable HC bubble for both touch-control styles.
+        let (btn_w, btn_h) = (48.0, 48.0);
+        let (btn_x, btn_y) = (
+            (settings.floating_menu_pos[0] * w).clamp(6.0, (w - btn_w - 6.0).max(6.0)),
+            (settings.floating_menu_pos[1] * h).clamp(4.0, (h - btn_h - 4.0).max(4.0)),
+        );
         let btn_rect = [btn_x, btn_y, btn_w, btn_h];
 
         if let Some((drag_id, offset, mut moved)) = self.floating_drag {
             if drag_id == id {
                 match phase {
                     TouchPhase::Moved => {
-                        if !self.goy_mode {
-                            return Some(InGameMenuAction::Close);
-                        }
                         let nx = (p[0] - offset[0]).clamp(6.0, (w - btn_w - 6.0).max(6.0));
                         let ny = (p[1] - offset[1]).clamp(4.0, (h - btn_h - 4.0).max(4.0));
                         if (nx - btn_x).hypot(ny - btn_y) > 5.0 {
@@ -2528,18 +2514,18 @@ impl TouchUi {
         let open_ease = 1.0 - (1.0 - open_t).powi(3);
         let tab_ease = 1.0 - (1.0 - tab_t).powi(3);
 
-        let theme = crate::ui_theme::active_theme();
-        let surface_bg = theme.bg_solid;
-        let sidebar_bg = theme.sidebar_bg;
-        let card_bg = theme.surface;
-        let card_sel = theme.surface_selected;
-        let border_c = theme.border;
-        let accent = theme.accent;
-        let accent_hi = theme.accent;
-        let accent_fg = theme.accent_text;
-        let text_c = theme.text_primary;
-        let muted_c = theme.text_muted;
-        let danger_c = theme.danger;
+        // Starling HC palette: near-black surfaces, electric-blue accents, crisp white text.
+        let surface_bg = rgba(5, 8, 14, 255);
+        let sidebar_bg = rgba(9, 15, 26, 255);
+        let card_bg = rgba(13, 20, 32, 255);
+        let card_sel = rgba(15, 48, 82, 255);
+        let border_c = rgba(29, 91, 155, 255);
+        let accent = rgba(0, 112, 255, 255);
+        let accent_hi = rgba(55, 153, 255, 255);
+        let accent_fg = rgba(255, 255, 255, 255);
+        let text_c = rgba(245, 248, 255, 255);
+        let muted_c = rgba(145, 165, 190, 255);
+        let danger_c = rgba(245, 75, 85, 255);
 
         let bubble_alpha = if self.floating_menu {
             1.0
@@ -2548,82 +2534,43 @@ impl TouchUi {
         };
 
         if bubble_alpha > 0.001 {
-            let gui_unit = ui.batch.scale / ui.density;
-            let (bx, by, bw, bh) = if settings.control_style == ControlStyle::Mcpe {
-                (
-                    3.0 * gui_unit,
-                    3.0 * gui_unit,
-                    33.0 * gui_unit,
-                    20.0 * gui_unit,
-                )
-            } else {
-                let (bw, bh) = (48.0, 42.0);
-                (
-                    (settings.floating_menu_pos[0] * w).clamp(6.0, (w - bw - 6.0).max(6.0)),
-                    (settings.floating_menu_pos[1] * h).clamp(4.0, (h - bh - 4.0).max(4.0)),
-                    bw,
-                    bh,
-                )
-            };
-            if settings.control_style == ControlStyle::Mcpe {
-                ui.fill(
-                    bx,
-                    by,
-                    bw,
-                    bh,
-                    color::with_alpha(rgba(0, 0, 0, 120), bubble_alpha),
-                );
-                ui.icon(
-                    Icon::HorizonLogo,
-                    bx + bw * 0.25,
-                    by + bh * 0.1,
-                    bh * 0.8,
-                    color::with_alpha(text_c, bubble_alpha),
-                );
-            } else {
-                ui.rounded(
-                    bx + 1.5,
-                    by + 3.0,
-                    bw,
-                    bh,
-                    14.0,
-                    color::with_alpha(rgba(0, 0, 0, 135), bubble_alpha),
-                );
-                ui.rounded(
-                    bx,
-                    by,
-                    bw,
-                    bh,
-                    14.0,
-                    color::with_alpha(
-                        if self.floating_menu { accent } else { card_bg },
-                        bubble_alpha,
-                    ),
-                );
-                ui.stroke_rounded(
-                    bx,
-                    by,
-                    bw,
-                    bh,
-                    14.0,
-                    1.6,
-                    color::with_alpha(accent, bubble_alpha),
-                );
-                ui.icon(
-                    Icon::MenuEquals,
-                    bx + (bw - 22.0) * 0.5,
-                    by + (bh - 22.0) * 0.5,
-                    22.0,
-                    color::with_alpha(
-                        if self.floating_menu {
-                            accent_fg
-                        } else {
-                            accent_hi
-                        },
-                        bubble_alpha,
-                    ),
-                );
-            }
+            let (bw, bh) = (48.0, 48.0);
+            let (bx, by) = (
+                (settings.floating_menu_pos[0] * w).clamp(6.0, (w - bw - 6.0).max(6.0)),
+                (settings.floating_menu_pos[1] * h).clamp(4.0, (h - bh - 4.0).max(4.0)),
+            );
+            ui.rounded(
+                bx + 1.0,
+                by + 3.0,
+                bw,
+                bh,
+                24.0,
+                color::with_alpha(rgba(0, 0, 0, 170), bubble_alpha),
+            );
+            ui.rounded(
+                bx,
+                by,
+                bw,
+                bh,
+                24.0,
+                color::with_alpha(rgba(3, 5, 10, 255), bubble_alpha),
+            );
+            ui.stroke_rounded(
+                bx,
+                by,
+                bw,
+                bh,
+                24.0,
+                2.0,
+                color::with_alpha(accent_hi, bubble_alpha),
+            );
+            ui.centered_fit(
+                Face::SemiBold,
+                17.0,
+                [bx + 2.0, by + 1.0, bw - 4.0, bh - 2.0],
+                color::with_alpha(accent_hi, bubble_alpha),
+                "HC",
+            );
         }
 
         if !self.floating_menu {
