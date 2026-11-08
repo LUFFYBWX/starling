@@ -215,6 +215,9 @@ pub struct TouchControls {
     pub settings_requested: bool,
     pub debug_requested: bool,
     pub perspective_requested: bool,
+    /// Double-tapping the perspective shortcut toggles experimental Freecam.
+    pub freecam_requested: bool,
+    last_perspective_tap: Option<Instant>,
     pub clicked: bool,
     pub context_use: bool,
     pub vertical_movement: bool,
@@ -262,6 +265,8 @@ impl Default for TouchControls {
             settings_requested: false,
             debug_requested: false,
             perspective_requested: false,
+            freecam_requested: false,
+            last_perspective_tap: None,
             clicked: false,
             context_use: false,
             vertical_movement: false,
@@ -977,7 +982,13 @@ impl TouchControls {
                     Role::Ignore
                 }
                 Some(Control::Perspective) => {
-                    self.perspective_requested = true;
+                    let now = Instant::now();
+                    if self.last_perspective_tap.take().is_some_and(|t| now.duration_since(t) < Duration::from_millis(350)) {
+                        self.freecam_requested = true;
+                    } else {
+                        self.perspective_requested = true;
+                        self.last_perspective_tap = Some(now);
+                    }
                     Role::Ignore
                 }
                 Some(Control::Sneak)
@@ -1099,6 +1110,8 @@ impl TouchControls {
         self.settings_requested = false;
         self.debug_requested = false;
         self.perspective_requested = false;
+        self.freecam_requested = false;
+        self.last_perspective_tap = None;
     }
     /// A short world tap never holds a mouse button into the next tick.
     /// Its item-use intent is resolved against the current entity target.
