@@ -217,6 +217,15 @@ fn load_player_type(root: &Path) -> Option<Arc<MobType>> {
         })
     })
 }
+/// Detached local camera used by the experimental Freecam mode.
+#[derive(Clone, Copy, Debug)]
+pub(super) struct Freecam {
+    pub(super) position: glam::DVec3,
+    pub(super) yaw: f32,
+    pub(super) pitch: f32,
+    pub(super) speed: f64,
+}
+
 fn wrap(d: f32) -> f32 {
     let d = d % 360.0;
     if d >= 180.0 {
@@ -241,7 +250,43 @@ impl Game<'_> {
     /// interpolated eye, or a point up to the camera distance behind (or in
     /// front of) it, pulled in where visual shapes are in the way. Returns the
     /// position, yaw and pitch to render from.
+    /// Toggle the detached camera without changing the server-side player position.
+    pub(super) fn toggle_freecam(&mut self) {
+        if self.freecam.take().is_some() { return; }
+        let Some(player) = self.player.as_ref() else { return; };
+        self.freecam = Some(Freecam {
+            position: glam::DVec3::new(player.position.x, player.position.y + f64::from(player.dimensions.eye_height), player.position.z),
+            yaw: self.yaw,
+            pitch: self.pitch,
+            speed: 8.0,
+        });
+    }
+    /// Mouse, touch and controller look are routed to the detached camera.
+    pub(super) fn turn_freecam(&mut self, xo: f64, yo: f64) {
+        if let Some(camera) = self.freecam.as_mut() {
+            let rotation = turn_rotation(camera.yaw, camera.pitch, None, xo, yo);
+            camera.yaw = rotation.y_rot;
+            camera.pitch = rotation.x_rot;
+        } else { self.turn_player(xo, yo); }
+    }
+    /// Move freely in the view plane; jump/shift move vertically.
+    pub(super) fn move_freecam(&mut self, seconds: f64, forward: bool, backward: bool, left: bool, right: bool, up: bool, down: bool, sprint: bool, stick: Option<[f32; 2]>) {
+        let Some(camera) = self.freecam.as_mut() else { return; };
+        let forward_dir = view_vector(camera.yaw, 0.0);
+        let right_dir = [forward_dir[2], 0.0, -forward_dir[0]];
+        let stick = stick.unwrap_or([0.0, 0.0]);
+        let mut x = f64::from(stick[0]) + f64::from(u8::from(right)) - f64::from(u8::from(left));
+        let mut z = f64::from(stick[1]) + f64::from(u8::from(forward)) - f64::from(u8::from(backward));
+        let length = (x * x + z * z).sqrt();
+        if length > 1.0 { x /= length; z /= length; }
+        let speed = camera.speed * if sprint { 3.0 } else { 1.0 } * seconds.clamp(0.0, 0.1);
+        camera.position.x += (right_dir[0] * x + forward_dir[0] * z) * speed;
+        camera.position.z += (right_dir[2] * x + forward_dir[2] * z) * speed;
+        camera.position.y += (f64::from(u8::from(up)) - f64::from(u8::from(down))) * speed;
+    }
+
     pub(super) fn camera_view(&mut self, partial: f32) -> Option<(glam::DVec3, f32, f32)> {
+        if let Some(camera) = self.freecam { return Some((camera.position, camera.yaw, camera.pitch)); }
         // Minecraft.cameraEntity: a server's spectator camera on a mob or
         // another player.
         let (entity, descending) = match self.camera_mob() {
@@ -561,7 +606,7 @@ impl Game<'_> {
     /// `LevelExtractor`'s skip of the camera entity: the player's own body
     /// is drawn unless the camera is in first person, or while it sleeps.
     pub(super) fn own_body_in_view(&self) -> bool {
-        !self.camera_type.first_person() || self.sleeping.is_some()
+        self.freecam.is_some() || !self.camera_type.first_person() || self.sleeping.is_some()
     }
     /// Whether the player's own model shows in the world view (its body or,
     /// while invisible, only its armour and held items).
