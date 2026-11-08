@@ -16883,6 +16883,11 @@ impl Game<'_> {
                         self.debug_key(KeyCode::F3, KeyAction::Press);
                         self.debug_key(KeyCode::F3, KeyAction::Release);
                     }
+                } else if std::mem::take(&mut self.pad.touch.freecam_requested) {
+                    self.audio.play_button_click();
+                    if let Err(error) = self.key_pressed(KeyCode::F6) {
+                        log::warn!("Touch Freecam: {error}");
+                    }
                 } else if std::mem::take(&mut self.pad.touch.perspective_requested) {
                     self.audio.play_button_click();
                     if let Err(error) = self.key_pressed(KeyCode::F5) {
