@@ -5562,7 +5562,8 @@ impl Game<'_> {
             if let Some(r) = self.remote.as_ref()
                 && r.loaded_sent
             {
-                let input = r.last_input;
+                // A detached Freecam must not replay stale movement while chunks load.
+                let input = if self.freecam.is_some() { 0 } else { r.last_input };
                 self.remote_send_state(input);
             }
             return Ok(());
@@ -5679,6 +5680,12 @@ impl Game<'_> {
             );
             player.velocity = Vec3::ZERO;
             player.pitch = 0.0;
+        } else if self.freecam.is_some() {
+            // Keep the real player body completely still while the detached camera moves.
+            // Skipping only the input keys is insufficient: residual velocity and physics
+            // can otherwise keep moving the local body during Freecam.
+            player.velocity = Vec3::ZERO;
+            player.health.advance_clock();
         } else if !dead && !riding {
             player.client_side = true;
             player.velocity = player.velocity.add_vector(pushed);
@@ -5836,7 +5843,8 @@ impl Game<'_> {
         // LocalPlayer.sendChanges sends `input.keyPresses`, which an auto-jump's `makeJump` set to
         // jump for this tick: the server's prediction plays the jump from it. Sent as held, the jump
         // was the client's alone, and the server saw a jump its keys didn't allow.
-        let auto_jumped = self.player.as_ref().is_some_and(|p| p.was_auto_jump);
+        let auto_jumped = self.freecam.is_none()
+            && self.player.as_ref().is_some_and(|p| p.was_auto_jump);
         self.remote_send_state(input | u8::from(auto_jumped) << 4);
         Ok(())
     }
