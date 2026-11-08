@@ -5589,6 +5589,21 @@ impl Game<'_> {
             analog: None,
         }
         .with_stick(stick.filter(|_| playing));
+        // A detached Freecam consumes movement locally. Never forward these
+        // controls to the server or let the local player simulation use them.
+        if self.freecam.is_some() && playing {
+            self.move_freecam(
+                0.05,
+                keys.forward,
+                keys.backward,
+                keys.left,
+                keys.right,
+                keys.jump,
+                keys.shift,
+                keys.sprint,
+                stick,
+            );
+        }
         // On a server (not this game's own server thread), the stick moves as the keys it sets do
         // (`KeyboardInput.tick`: 8 directions, full speed). The server only hears those keys
         // (`ServerboundPlayerInputPacket`), and an anticheat that predicts from them pulls back
@@ -5596,13 +5611,17 @@ impl Game<'_> {
         if self.integrated.is_none() && self.server_address().is_some() {
             keys.analog = None;
         }
-        let input = u8::from(keys.forward)
-            | u8::from(keys.backward) << 1
-            | u8::from(keys.left) << 2
-            | u8::from(keys.right) << 3
-            | u8::from(keys.jump) << 4
-            | u8::from(keys.shift) << 5
-            | u8::from(keys.sprint) << 6;
+        let input = if self.freecam.is_some() {
+            0
+        } else {
+            u8::from(keys.forward)
+                | u8::from(keys.backward) << 1
+                | u8::from(keys.left) << 2
+                | u8::from(keys.right) << 3
+                | u8::from(keys.jump) << 4
+                | u8::from(keys.shift) << 5
+                | u8::from(keys.sprint) << 6
+        };
         // LocalPlayer.applyInput and aiStep: watching through another
         // entity, the player does not move itself; its keys still reach the
         // server, whose sneak check lets go of the camera.
