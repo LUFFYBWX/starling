@@ -1,0 +1,15 @@
+name: Actions diagnostic
+
+on:
+  push:
+    branches: [fix/freecam-air-physics]
+
+permissions:
+  contents: read
+
+jobs:
+  smoke-test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Confirm runner startup
+        run: echo "GitHub Actions runner started successfully"
