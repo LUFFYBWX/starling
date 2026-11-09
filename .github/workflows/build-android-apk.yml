@@ -1,6 +1,6 @@
 name: Build Android APK
 
-# Trigger a fresh build for the latest ESP fixes.
+# Build the Android APK for scanner and Freecam compatibility changes.
 
 on:
   push:
