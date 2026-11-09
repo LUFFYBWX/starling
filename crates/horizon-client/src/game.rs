@@ -6937,20 +6937,24 @@ impl Game<'_> {
                 held(KeyCode::ControlLeft), stick,
             );
         }
-        if self.riding.is_some() && self.player.is_some() && self.freecam.is_none() {
+        if self.riding.is_some() && self.player.is_some() {
             let playing = self.screen == Screen::Playing && !self.dialog_open();
             let held = |k| playing && self.keys.contains(&k);
-            let keys = Keys {
-                forward: held(KeyCode::KeyW),
-                backward: held(KeyCode::KeyS),
-                left: held(KeyCode::KeyA),
-                right: held(KeyCode::KeyD),
-                jump: held(KeyCode::Space),
-                shift: held(KeyCode::ShiftLeft),
-                sprint: false,
-                analog: None,
-            }
-            .with_stick(stick.filter(|_| playing));
+            let keys = if self.freecam.is_some() {
+                Keys::default()
+            } else {
+                Keys {
+                    forward: held(KeyCode::KeyW),
+                    backward: held(KeyCode::KeyS),
+                    left: held(KeyCode::KeyA),
+                    right: held(KeyCode::KeyD),
+                    jump: held(KeyCode::Space),
+                    shift: held(KeyCode::ShiftLeft),
+                    sprint: false,
+                    analog: None,
+                }
+                .with_stick(stick.filter(|_| playing))
+            };
             self.tick_riding(keys)?;
         }
         let riding = self.riding.is_some();
@@ -7003,7 +7007,14 @@ impl Game<'_> {
             [player.velocity.x, player.velocity.y, player.velocity.z],
             [player.position.x, player.position.y, player.position.z],
         );
-        if !riding && self.freecam.is_none() {
+        if !riding {
+            // Freecam owns the movement keys, but the real player must keep
+            // simulating gravity, friction and collisions while the camera is detached.
+            let simulation_keys = if self.freecam.is_some() {
+                Keys::default()
+            } else {
+                keys
+            };
             MotionWorld {
                 entities: &entity_collisions,
                 player,
@@ -7012,9 +7023,9 @@ impl Game<'_> {
                 collision_binding: self.collision,
                 resources: self.motion,
             }
-            .controlled_simulation_tick_with_sprint_window(keys, sprint_window)?;
+            .controlled_simulation_tick_with_sprint_window(simulation_keys, sprint_window)?;
             // Player.jumpFromGround: the jump statistic.
-            if grounded && keys.jump && !player.flying && player.velocity.y > 0.2 {
+            if grounded && simulation_keys.jump && !player.flying && player.velocity.y > 0.2 {
                 self.stats.custom("jump", 1);
             }
         }
