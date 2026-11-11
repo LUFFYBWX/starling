@@ -2,7 +2,7 @@ name: Build Android APK
 
 on:
   push:
-    branches: [feature/amethyst-scanner]
+    branches: [feature/amethyst-scanner, test/geode-validation]
   workflow_dispatch:
 
 permissions:
