@@ -4,7 +4,7 @@ on:
   pull_request:
     branches: [android]
   push:
-    branches: [feature/amethyst-scanner]
+    branches: [feature/amethyst-scanner, test/geode-validation]
   workflow_dispatch:
 
 permissions:
