@@ -2,7 +2,7 @@ name: Build Android APK
 
 on:
   push:
-    branches: [feature/amethyst-scanner]
+    branches: [feature/amethyst-scanner, fix/geode-filter-stable-only]
   workflow_dispatch:
 
 permissions:
