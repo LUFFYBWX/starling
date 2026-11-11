@@ -5606,10 +5606,10 @@ impl Game<'_> {
         // LocalPlayer.applyInput and aiStep: watching through another
         // entity, the player does not move itself; its keys still reach the
         // server, whose sneak check lets go of the camera.
-        let keys = if self.freecam.is_some() || !self.controls_camera() {
-            Keys::default()
-        } else {
+        let keys = if self.controls_camera() {
             keys
+        } else {
+            Keys::default()
         };
         // A passenger moves with its vehicle (Entity.rideTick), not by itself.
         let riding = self.screen != Screen::Dead && self.remote_ride(keys);
