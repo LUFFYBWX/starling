@@ -98,7 +98,20 @@ fn scan_loaded_states_near(
     found
 }
 
+/// Returns true when a non-structure block entity exists in the same chunk
+/// or one of its eight neighboring chunks.
+fn has_nearby_block_entity(marker: &AmethystMarker, entities: &[BlockEntityMarker]) -> bool {
+    let (cx, cz) = (marker.x.div_euclid(16), marker.z.div_euclid(16));
+    entities.iter().any(|entity| {
+        entity.kind != 3
+            && (entity.x.div_euclid(16) - cx).abs() <= 1
+            && (entity.z.div_euclid(16) - cz).abs() <= 1
+    })
+}
+
 /// Scan loaded chunks for fully-grown amethyst clusters (not budding blocks).
+/// A cluster is only exposed by the scanner when a useful block entity is
+/// present in its 3x3 chunk neighborhood, reducing natural-geode noise.
 pub fn scan_loaded_chunks_near(
     world: &crate::world::World,
     facts: &crate::blocks::BlockFacts,
@@ -106,7 +119,14 @@ pub fn scan_loaded_chunks_near(
     radius_chunks: i32,
 ) -> Vec<AmethystMarker> {
     let states = state_ids_named(facts, &["minecraft:amethyst_cluster"]);
-    scan_loaded_states_near(world, &states, facts.air.0, center_chunk, radius_chunks)
+    let clusters = scan_loaded_states_near(world, &states, facts.air.0, center_chunk, radius_chunks);
+    // Include one extra chunk so evidence beside the scan-radius boundary is not missed.
+    let entities = scan_loaded_block_entities_near(
+        world, facts, center_chunk, radius_chunks.max(0).saturating_add(1),
+    );
+    clusters.into_iter()
+        .filter(|marker| has_nearby_block_entity(marker, &entities))
+        .collect()
 }
 
 /// Scan loaded chunks for explicitly selected artificial-light block types.
@@ -289,6 +309,25 @@ pub fn score_suspicious_chunks(
 mod tests {
     use super::*;
     use crate::chunk::{Chunk, ColumnLayout};
+
+    #[test]
+    fn geode_requires_block_entity_in_same_or_neighbor_chunk() {
+        let cluster = AmethystMarker { x: 31, y: 20, z: 31 };
+        let no_entities = [];
+        assert!(!has_nearby_block_entity(&cluster, &no_entities));
+
+        // Chunk (2, 1) is diagonally adjacent to the cluster's chunk (1, 1).
+        let nearby = [BlockEntityMarker { x: 32, y: 20, z: 16, kind: 0 }];
+        assert!(has_nearby_block_entity(&cluster, &nearby));
+
+        // A block entity two chunks away must not qualify.
+        let far = [BlockEntityMarker { x: 48, y: 20, z: 16, kind: 0 }];
+        assert!(!has_nearby_block_entity(&cluster, &far));
+
+        // Trial spawners, vaults and mob spawners are structure exclusions.
+        let structure = [BlockEntityMarker { x: 32, y: 20, z: 16, kind: 3 }];
+        assert!(!has_nearby_block_entity(&cluster, &structure));
+    }
 
     #[test]
     fn common_generated_storage_alone_does_not_flag_a_chunk() {
