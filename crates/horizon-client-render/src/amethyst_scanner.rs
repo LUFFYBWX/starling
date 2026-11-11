@@ -122,7 +122,7 @@ pub fn scan_loaded_chunks_near(
     let clusters = scan_loaded_states_near(world, &states, facts.air.0, center_chunk, radius_chunks);
     // Include one extra chunk so evidence beside the scan-radius boundary is not missed.
     let entities = scan_loaded_block_entities_near(
-        world, facts, center_chunk, radius_chunks.max(0).saturating_add(1),
+        world, facts, center_chunk, radius_chunks.max(0).saturating_add(2),
     );
     clusters.into_iter()
         .filter(|marker| has_nearby_block_entity(marker, &entities))
